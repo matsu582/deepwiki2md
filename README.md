@@ -29,7 +29,7 @@ This tool has two operation modes.
 
 **CUI Mode (Default)**
 
-This mode runs in the background without displaying a browser window. When login is required, you enter your email address and authentication code in the terminal. It is suitable for automated execution in server environments or CI/CD pipelines. However, it does not support OAuth authentication (GitHub/Google, etc.), so only email + authentication code login is available.
+This mode runs in the background without displaying a browser window. When login is required, you enter your email address and authentication code in the terminal. It is suitable for execution in server environments without GUI (such as SSH connections). However, it does not support OAuth authentication (GitHub/Google, etc.), so only email + authentication code login is available.
 
 **GUI Mode (--no-headless)**
 
