@@ -118,13 +118,13 @@ python deepwiki2md.py <DeepWiki URL>
 
 ### オプション
 
-| オプション             | 説明                                   | デフォルト    |
-| ---------------------- | -------------------------------------- | ------------- |
-| `-o`, `--output`       | 出力ディレクトリ                       | `output`      |
-| `-l`, `--lang`         | 言語選択                               | `japanese`    |
-| `-d`, `--diagram_type` | 図の出力形式                           | `mermaid,svg` |
-| `-e`, `--email`        | ログイン用メールアドレス               | なし（プロンプト表示） |
-| `--no-headless`        | GUIモードで実行（ブラウザ画面を表示）  | `false`       |
+| オプション             | 説明                                  | デフォルト             |
+| ---------------------- | ------------------------------------- | ---------------------- |
+| `-o`, `--output`       | 出力ディレクトリ                      | `output`               |
+| `-l`, `--lang`         | 言語選択                              | `japanese`             |
+| `-d`, `--diagram_type` | 図の出力形式                          | `mermaid,svg`          |
+| `-e`, `--email`        | ログイン用メールアドレス              | なし（プロンプト表示） |
+| `--no-headless`        | GUIモードで実行（ブラウザ画面を表示） | `false`                |
 
 ### 図の出力形式（--diagram_type）
 
@@ -231,7 +231,7 @@ webdriver-managerが自動的にChromeDriverをダウンロードしますが、
 
 - Windows: `%LOCALAPPDATA%\DeepWiki2Md\chrome_profile`
 - macOS: `~/Library/Application Support/DeepWiki2Md/chrome_profile`
-- Linux: `~/.config/deepwiki2mder/chrome_profile`
+- Linux: `~/.config/deepwiki2md/chrome_profile`
 
 問題が発生した場合は、このディレクトリを削除してください。
 

@@ -118,13 +118,13 @@ python deepwiki2md.py <DeepWiki URL>
 
 ### Options
 
-| Option                 | Description                              | Default       |
-| ---------------------- | ---------------------------------------- | ------------- |
-| `-o`, `--output`       | Output directory                         | `output`      |
-| `-l`, `--lang`         | Language selection                       | `japanese`    |
-| `-d`, `--diagram_type` | Diagram output type                      | `mermaid,svg` |
+| Option                 | Description                              | Default                 |
+| ---------------------- | ---------------------------------------- | ----------------------- |
+| `-o`, `--output`       | Output directory                         | `output`                |
+| `-l`, `--lang`         | Language selection                       | `japanese`              |
+| `-d`, `--diagram_type` | Diagram output type                      | `mermaid,svg`           |
 | `-e`, `--email`        | Email address for login                  | None (prompt displayed) |
-| `--no-headless`        | Run in GUI mode (display browser window) | `false`       |
+| `--no-headless`        | Run in GUI mode (display browser window) | `false`                 |
 
 ### Diagram Output Type (--diagram_type)
 
@@ -206,13 +206,13 @@ output_directory/
 
 ## File Structure
 
-| File                   | Description                   |
-| ---------------------- | ----------------------------- |
-| `deepwiki2md.py`       | Main script                   |
-| `extract_subgraphs.py` | SVG to Mermaid conversion     |
-| `html_to_markdown.py`  | HTML to Markdown conversion   |
-| `pyproject.toml`       | Project configuration (uv)    |
-| `requirements.txt`     | Dependencies (pip)            |
+| File                   | Description                 |
+| ---------------------- | --------------------------- |
+| `deepwiki2md.py`       | Main script                 |
+| `extract_subgraphs.py` | SVG to Mermaid conversion   |
+| `html_to_markdown.py`  | HTML to Markdown conversion |
+| `pyproject.toml`       | Project configuration (uv)  |
+| `requirements.txt`     | Dependencies (pip)          |
 
 ## Troubleshooting
 
@@ -231,7 +231,7 @@ Session information is saved in the following location:
 
 - Windows: `%LOCALAPPDATA%\DeepWiki2Md\chrome_profile`
 - macOS: `~/Library/Application Support/DeepWiki2Md/chrome_profile`
-- Linux: `~/.config/deepwiki2mder/chrome_profile`
+- Linux: `~/.config/deepwiki2md/chrome_profile`
 
 If problems occur, delete this directory.
 
