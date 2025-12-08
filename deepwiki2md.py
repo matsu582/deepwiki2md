@@ -181,7 +181,7 @@ class DeepWikiExporter:
         self.wait = WebDriverWait(self.driver, 30)
         return self.driver
     
-    def navigate_and_wait_for_login(self, url):
+    def navigate_and_wait_for_login(self, url, headless=False):
         """URLに移動し、ユーザーのログインを待つ"""
         print(f"\nブラウザを開いています: {url}")
         self.driver.get(url)
@@ -198,15 +198,26 @@ class DeepWikiExporter:
         
         # app.devin.ai/wikiの場合はログインが必要かどうかを確認
         if 'auth' in current_url or 'login' in current_url or 'sign' in current_url:
-            print("\n" + "="*60)
-            print("ログインが必要です。")
-            print("ブラウザでログインを完了してください。")
-            print("ログイン完了後、このターミナルでEnterキーを押してください。")
-            print("="*60 + "\n")
-            input(">>> ログイン完了後、Enterキーを押してください: ")
-            
-            # ログイン後、元のURLに戻る
-            self.driver.get(url)
+            if headless:
+                # ヘッドレスモード: CUIでログイン情報を入力
+                if self._is_login_page() or self._is_code_page():
+                    login_success = self._handle_cui_login()
+                    if not login_success:
+                        print("ログインに失敗しました。終了します。")
+                        return False
+                    # ログイン後、元のURLに戻る
+                    self.driver.get(url)
+            else:
+                # GUIモード: ユーザーに手動ログインを促す
+                print("\n" + "="*60)
+                print("ログインが必要です。")
+                print("ブラウザでログインを完了してください。")
+                print("ログイン完了後、このターミナルでEnterキーを押してください。")
+                print("="*60 + "\n")
+                input(">>> ログイン完了後、Enterキーを押してください: ")
+                
+                # ログイン後、元のURLに戻る
+                self.driver.get(url)
         
         self.wait_for_page_load()
         return True
@@ -239,6 +250,87 @@ class DeepWikiExporter:
             
         except Exception as e:
             print(f"  警告: ページ読み込み待機中にエラー: {e}")
+    
+    def _is_login_page(self):
+        """ログインページかどうかを判定（メールアドレス入力ページ）"""
+        try:
+            self.driver.find_element(By.ID, 'username')
+            return True
+        except NoSuchElementException:
+            return False
+    
+    def _is_code_page(self):
+        """認証コード入力ページかどうかを判定"""
+        try:
+            self.driver.find_element(By.ID, 'code')
+            return True
+        except NoSuchElementException:
+            return False
+    
+    def _handle_cui_login(self):
+        """CUIベースのログイン処理（メール＋認証コード方式）"""
+        max_attempts = 3
+        
+        for attempt in range(max_attempts):
+            if self._is_login_page():
+                print("\n" + "="*60)
+                print("ログインページを検出しました（ヘッドレスモード）")
+                print("="*60)
+                
+                email = input("メールアドレスを入力してください: ").strip()
+                if not email:
+                    print("メールアドレスが入力されていません")
+                    continue
+                
+                try:
+                    email_input = self.driver.find_element(By.ID, 'username')
+                    email_input.clear()
+                    email_input.send_keys(email)
+                    
+                    continue_btn = self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        'button[type="submit"][name="action"][value="default"]'
+                    )
+                    continue_btn.click()
+                    
+                    time.sleep(3)
+                except Exception as e:
+                    print(f"メールアドレス入力エラー: {e}")
+                    continue
+            
+            if self._is_code_page():
+                print("\n" + "="*60)
+                print("認証コード入力ページを検出しました")
+                print("メールに送信された認証コードを入力してください")
+                print("="*60)
+                
+                code = input("認証コードを入力してください: ").strip()
+                if not code:
+                    print("認証コードが入力されていません")
+                    continue
+                
+                try:
+                    code_input = self.driver.find_element(By.ID, 'code')
+                    code_input.clear()
+                    code_input.send_keys(code)
+                    
+                    continue_btn = self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        'button[type="submit"][name="action"][value="default"]'
+                    )
+                    continue_btn.click()
+                    
+                    time.sleep(3)
+                except Exception as e:
+                    print(f"認証コード入力エラー: {e}")
+                    continue
+            
+            if not self._is_login_page() and not self._is_code_page():
+                print("ログイン成功")
+                return True
+        
+        print("ログインに失敗しました")
+        return False
     
     def select_language(self, lang):
         """言語プルダウンから指定された言語を選択（Radix UI対応）"""
@@ -1611,6 +1703,8 @@ def main():
     parser.add_argument('-l', '--lang', default='japanese', help='言語選択（デフォルト: japanese）※deepwiki.comでは無効')
     parser.add_argument('-d', '--diagram_type', default='mermaid,svg', 
                         help='図の出力形式（デフォルト: mermaid,svg）。png/svg/mermaidをカンマ区切りで指定')
+    parser.add_argument('--headless', action='store_true',
+                        help='ヘッドレスモードで実行（CUIログイン対応）')
     
     args = parser.parse_args()
     
@@ -1628,10 +1722,10 @@ def main():
     try:
         # ブラウザを起動
         print("ブラウザを起動中...")
-        exporter.setup_browser(headless=False)
+        exporter.setup_browser(headless=args.headless)
         
         # ログインを待つ（deepwiki.comの場合はスキップ）
-        exporter.navigate_and_wait_for_login(args.url)
+        exporter.navigate_and_wait_for_login(args.url, headless=args.headless)
         
         # 言語を選択（deepwiki.comの場合はスキップ）
         if args.lang and exporter.site_type == DeepWikiExporter.SITE_DEVIN:

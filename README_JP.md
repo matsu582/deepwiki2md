@@ -106,11 +106,12 @@ python deepwiki2md.py <DeepWiki URL>
 
 ### オプション
 
-| オプション             | 説明             | デフォルト    |
-| ---------------------- | ---------------- | ------------- |
-| `-o`, `--output`       | 出力ディレクトリ | `output`      |
-| `-l`, `--lang`         | 言語選択         | `japanese`    |
-| `-d`, `--diagram_type` | 図の出力形式     | `mermaid,svg` |
+| オプション             | 説明                                   | デフォルト    |
+| ---------------------- | -------------------------------------- | ------------- |
+| `-o`, `--output`       | 出力ディレクトリ                       | `output`      |
+| `-l`, `--lang`         | 言語選択                               | `japanese`    |
+| `-d`, `--diagram_type` | 図の出力形式                           | `mermaid,svg` |
+| `--headless`           | ヘッドレスモードで実行（CUIログイン対応） | `false`       |
 
 ### 図の出力形式（--diagram_type）
 
@@ -140,6 +141,9 @@ uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png
 
 # PNG優先、Mermaid・SVGは折りたたみ
 uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
+
+# ヘッドレスモードで実行（CUIログイン対応）
+uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --headless
 ```
 
 ## 実行の流れ
@@ -158,6 +162,16 @@ uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
 1. ツールを起動するとChromeブラウザが開きます
 2. ログイン不要で自動的にページを読み込みます
 3. ツールが自動的に全セクションを取得してMarkdownに変換します
+
+### ヘッドレスモード（--headless）の場合
+
+1. ツールを起動するとヘッドレスブラウザが起動します（画面表示なし）
+2. ログインページを検出した場合、CUIでメールアドレスの入力を求められます
+3. メールアドレスを入力すると、認証コードがメールに送信されます
+4. 認証コード入力ページを検出した場合、CUIで認証コードの入力を求められます
+5. ログイン成功後、ツールが自動的に全セクションを取得してMarkdownに変換します
+
+ヘッドレスモードはOAuth（GitHub/Google等）には対応していません。メール＋認証コード方式のみ対応しています。
 
 ## 出力ファイル
 

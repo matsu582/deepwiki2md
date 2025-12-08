@@ -106,11 +106,12 @@ python deepwiki2md.py <DeepWiki URL>
 
 ### Options
 
-| Option                 | Description         | Default       |
-| ---------------------- | ------------------- | ------------- |
-| `-o`, `--output`       | Output directory    | `output`      |
-| `-l`, `--lang`         | Language selection  | `japanese`    |
-| `-d`, `--diagram_type` | Diagram output type | `mermaid,svg` |
+| Option                 | Description                              | Default       |
+| ---------------------- | ---------------------------------------- | ------------- |
+| `-o`, `--output`       | Output directory                         | `output`      |
+| `-l`, `--lang`         | Language selection                       | `japanese`    |
+| `-d`, `--diagram_type` | Diagram output type                      | `mermaid,svg` |
+| `--headless`           | Run in headless mode (CUI login support) | `false`       |
 
 ### Diagram Output Type (--diagram_type)
 
@@ -140,6 +141,9 @@ uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png
 
 # PNG first, Mermaid and SVG in collapsible sections
 uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
+
+# Run in headless mode (CUI login support)
+uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --headless
 ```
 
 ## Execution Flow
@@ -158,6 +162,16 @@ uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
 1. The tool launches a Chrome browser
 2. No login required - the page loads automatically
 3. The tool automatically retrieves all sections and converts them to Markdown
+
+### Headless Mode (--headless)
+
+1. The tool launches a headless browser (no display)
+2. If a login page is detected, you will be prompted to enter your email address via CUI
+3. After entering your email, an authentication code will be sent to your email
+4. If an authentication code page is detected, you will be prompted to enter the code via CUI
+5. After successful login, the tool automatically retrieves all sections and converts them to Markdown
+
+Headless mode does not support OAuth (GitHub/Google, etc.). Only email + authentication code method is supported.
 
 ## Output Files
 
