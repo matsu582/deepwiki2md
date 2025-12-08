@@ -1,0 +1,371 @@
+# Japanese translations for deepwiki2md
+# Copyright (C) 2024
+# This file is distributed under the same license as the deepwiki2md package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: deepwiki2md 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Japanese\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Error: selenium is not installed"
+msgstr "エラー: seleniumがインストールされていません"
+
+msgid "Install: pip install selenium"
+msgstr "インストール: pip install selenium"
+
+msgid "Warning: webdriver-manager is not installed"
+msgstr "警告: webdriver-managerがインストールされていません"
+
+msgid "For automatic ChromeDriver management: pip install webdriver-manager"
+msgstr "自動ChromeDriver管理を使用するには: pip install webdriver-manager"
+
+msgid "Error: beautifulsoup4 is not installed"
+msgstr "エラー: beautifulsoup4がインストールされていません"
+
+msgid "Install: pip install beautifulsoup4"
+msgstr "インストール: pip install beautifulsoup4"
+
+msgid "Warning: extract_subgraphs.py not found. Mermaid conversion is disabled."
+msgstr "警告: extract_subgraphs.pyが見つかりません。Mermaid変換は無効です。"
+
+msgid "Site type: {}"
+msgstr "サイト種別: {}"
+
+msgid "deepwiki.com: No login required"
+msgstr "deepwiki.com: ログイン不要です"
+
+msgid "Login failed. Exiting."
+msgstr "ログインに失敗しました。終了します。"
+
+msgid "Login required."
+msgstr "ログインが必要です。"
+
+msgid "Auto-filling email address: {}"
+msgstr "メールアドレスを自動入力: {}"
+
+msgid "Email entered and Continue button clicked."
+msgstr "メールアドレスを入力し、Continueボタンをクリックしました。"
+
+msgid "Authentication code will be sent to your email."
+msgstr "認証コードがメールに送信されます。"
+
+msgid "Failed to auto-fill email: {}"
+msgstr "メールアドレスの自動入力に失敗: {}"
+
+msgid "Please complete login in the browser."
+msgstr "ブラウザでログインを完了してください。"
+
+msgid "Press Enter in this terminal after login is complete."
+msgstr "ログイン完了後、このターミナルでEnterキーを押してください。"
+
+msgid ">>> Press Enter after login is complete: "
+msgstr ">>> ログイン完了後にEnterを押してください: "
+
+msgid "  Warning: Error while waiting for page load: {}"
+msgstr "  警告: ページ読み込み待機中にエラー: {}"
+
+msgid "Login page detected (headless mode)"
+msgstr "ログインページを検出しました（ヘッドレスモード）"
+
+msgid "Email address: {}"
+msgstr "メールアドレス: {}"
+
+msgid "Enter email address: "
+msgstr "メールアドレスを入力してください: "
+
+msgid "Email address not entered"
+msgstr "メールアドレスが入力されていません"
+
+msgid "Email input error: {}"
+msgstr "メール入力エラー: {}"
+
+msgid "Authentication code input page detected"
+msgstr "認証コード入力ページを検出しました"
+
+msgid "Please enter the authentication code sent to your email"
+msgstr "メールに送信された認証コードを入力してください"
+
+msgid "Enter authentication code: "
+msgstr "認証コードを入力してください: "
+
+msgid "Authentication code not entered"
+msgstr "認証コードが入力されていません"
+
+msgid "Authentication code input error: {}"
+msgstr "認証コード入力エラー: {}"
+
+msgid "Login successful"
+msgstr "ログイン成功"
+
+msgid "Login failed"
+msgstr "ログイン失敗"
+
+msgid "\nSelecting language: {}"
+msgstr "\n言語を選択中: {}"
+
+msgid "  Language dropdown detected: {} (current: {})"
+msgstr "  言語ドロップダウンを検出: {} (現在: {})"
+
+msgid "  Warning: Language dropdown not found"
+msgstr "  警告: 言語ドロップダウンが見つかりません"
+
+msgid "  {} is already selected"
+msgstr "  {} は既に選択されています"
+
+msgid "  Language selected: {}"
+msgstr "  言語を選択しました: {}"
+
+msgid "  Warning: Language '{}' not found"
+msgstr "  警告: 言語 '{}' が見つかりません"
+
+msgid "  Language selection error: {}"
+msgstr "  言語選択エラー: {}"
+
+msgid "  Section retrieval error: {}"
+msgstr "  セクション取得エラー: {}"
+
+msgid "  Sidebar detected: {} ({} items)"
+msgstr "  サイドバーを検出: {} ({}件)"
+
+msgid "  Warning: Sidebar link elements not found"
+msgstr "  警告: サイドバーのリンク要素が見つかりません"
+
+msgid "  Link info retrieval error (index={}): {}"
+msgstr "  リンク情報取得エラー (index={}): {}"
+
+msgid "  Retrieved sections: {}"
+msgstr "  取得したセクション数: {}"
+
+msgid "    ... and {} more"
+msgstr "    ... 他{}件"
+
+msgid "  Warning: Sidebar button elements not found"
+msgstr "  警告: サイドバーのボタン要素が見つかりません"
+
+msgid "  Detected hierarchy levels: {} levels"
+msgstr "  検出した階層レベル: {}階層"
+
+msgid "  Button info retrieval error (index={}): {}"
+msgstr "  ボタン情報取得エラー (index={}): {}"
+
+msgid "  Scrolling page to load content..."
+msgstr "  コンテンツを読み込むためにページをスクロール中..."
+
+msgid "  Scroll error: {}"
+msgstr "  スクロールエラー: {}"
+
+msgid "  HTML retrieval error: {}"
+msgstr "  HTML取得エラー: {}"
+
+msgid "  SVG save error: {}"
+msgstr "  SVG保存エラー: {}"
+
+msgid "  SVG save error (for PNG): {}"
+msgstr "  SVG保存エラー（PNG用）: {}"
+
+msgid "  Mermaid conversion error: {}"
+msgstr "  Mermaid変換エラー: {}"
+
+msgid "\n[{}] Exporting: {} (level {})"
+msgstr "\n[{}] エクスポート中: {} (レベル{})"
+
+msgid "  Navigation error: {}"
+msgstr "  ナビゲーションエラー: {}"
+
+msgid "  Saved: {}"
+msgstr "  保存完了: {}"
+
+msgid "  Link click failed, falling back to URL navigation: {}"
+msgstr "  リンククリック失敗、URLナビゲーションにフォールバック: {}"
+
+msgid "Link index {} is out of range and href is not available"
+msgstr "リンク index {} が範囲外で、hrefも取得できません"
+
+msgid "Button index {} is out of range"
+msgstr "ボタン index {} が範囲外です"
+
+msgid "  Click wait error, trying direct click: {}"
+msgstr "  クリック待機エラー、直接クリックを試行: {}"
+
+msgid "Starting DeepWiki export"
+msgstr "DeepWikiエクスポートを開始します"
+
+msgid "\nNo sections found. Exporting current page only."
+msgstr "\nセクションが見つかりません。現在のページのみエクスポートします。"
+
+msgid "Saved: {}"
+msgstr "保存完了: {}"
+
+msgid "\nDetected sections: {}"
+msgstr "\n検出されたセクション数: {}"
+
+msgid "Export completed!"
+msgstr "エクスポート完了!"
+
+msgid "Output directory: {}"
+msgstr "出力ディレクトリ: {}"
+
+msgid "Exported files: {}"
+msgstr "エクスポートされたファイル数: {}"
+
+msgid "\nConverting internal links..."
+msgstr "\n内部リンクを変換中..."
+
+msgid "  Converted links in {} files"
+msgstr "  {}ファイルのリンクを変換しました"
+
+msgid "  No links to convert"
+msgstr "  変換対象のリンクはありませんでした"
+
+msgid "# Table of Contents"
+msgstr "# 目次"
+
+msgid "\nGenerated table of contents: {}"
+msgstr "\n目次を生成: {}"
+
+msgid "\nStarting browser for PNG conversion..."
+msgstr "\nPNG変換用ブラウザを起動中..."
+
+msgid "  Failed to get ChromeDriver via webdriver-manager: {}"
+msgstr "  webdriver-managerでのChromeDriver取得に失敗: {}"
+
+msgid "  Failed to set transparent background: {}"
+msgstr "  背景透過設定に失敗: {}"
+
+msgid "  PNG conversion error ({}): {}"
+msgstr "  PNG変換エラー ({}): {}"
+
+msgid "\nConverting {} SVGs to PNG..."
+msgstr "\n{}個のSVGをPNGに変換中..."
+
+msgid "  PNG conversion completed: {}/{}"
+msgstr "  PNG変換完了: {}/{}"
+
+msgid "DeepWiki Export Tool"
+msgstr "DeepWikiエクスポートツール"
+
+msgid "DeepWiki URL (e.g., https://deepwiki.com/owner/repo or https://app.devin.ai/wiki/owner/repo)"
+msgstr "DeepWiki URL (例: https://deepwiki.com/owner/repo または https://app.devin.ai/wiki/owner/repo)"
+
+msgid "Output directory (default: output)"
+msgstr "出力ディレクトリ（デフォルト: output）"
+
+msgid "Language selection (default: japanese) *disabled for deepwiki.com"
+msgstr "言語選択（デフォルト: japanese）※deepwiki.comでは無効"
+
+msgid "Diagram output format (default: mermaid,svg). Specify png/svg/mermaid comma-separated"
+msgstr "図の出力形式（デフォルト: mermaid,svg）。png/svg/mermaidをカンマ区切りで指定"
+
+msgid "Run in GUI mode (show browser window)"
+msgstr "GUIモードで実行（ブラウザ画面を表示）"
+
+msgid "Email address for login (prompts if not specified)"
+msgstr "ログイン用メールアドレス（指定しない場合は入力プロンプトを表示）"
+
+msgid "Error: Please specify a valid URL"
+msgstr "エラー: 有効なURLを指定してください"
+
+msgid "Starting browser..."
+msgstr "ブラウザを起動中..."
+
+msgid "deepwiki.com: Skipping language selection"
+msgstr "deepwiki.com: 言語選択はスキップします"
+
+msgid "\n\nInterrupted."
+msgstr "\n\n中断されました。"
+
+msgid "\nError: {}"
+msgstr "\nエラー: {}"
+
+msgid ""
+"\n"
+"DeepWiki Export Tool\n"
+"\n"
+"Usage:\n"
+"    python deepwiki2md.py <DeepWiki URL> [options]\n"
+"\n"
+"Supported sites:\n"
+"    - https://deepwiki.com/owner/repo (public, no login required)\n"
+"    - https://app.devin.ai/wiki/owner/repo (login required)\n"
+"\n"
+"Options:\n"
+"    --output, -o        Output directory (default: output)\n"
+"    --lang, -l          Language selection (default: japanese)\n"
+"                        * Language selection is disabled for deepwiki.com\n"
+"                        Examples: japanese, english, chinese, korean, etc.\n"
+"    --diagram_type, -d  Diagram output format (default: mermaid,svg)\n"
+"                        png: PNG image only\n"
+"                        svg: SVG image only\n"
+"                        mermaid: Mermaid notation only\n"
+"                        Multiple formats (comma-separated): png,mermaid,svg\n"
+"                        First format displays inline, others collapse in details\n"
+"\n"
+"Examples:\n"
+"    # deepwiki.com (public)\n"
+"    python deepwiki2md.py https://deepwiki.com/microsoft/vscode\n"
+"    python deepwiki2md.py https://deepwiki.com/owner/repo -o ./output\n"
+"    \n"
+"    # app.devin.ai/wiki (login required)\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --lang english\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -o ./output -l japanese\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -d png,mermaid,svg\n"
+"\n"
+"Required packages:\n"
+"    pip install selenium beautifulsoup4 webdriver-manager\n"
+"\n"
+"Notes:\n"
+"    - Chrome/Chromium browser is required\n"
+"    - app.devin.ai/wiki requires login on first run (session is preserved)\n"
+"    - deepwiki.com does not require login\n"
+"    - PNG output is generated by rendering SVG in browser\n"
+msgstr ""
+"\n"
+"DeepWikiエクスポートツール\n"
+"\n"
+"使用方法:\n"
+"    python deepwiki2md.py <DeepWiki URL> [オプション]\n"
+"\n"
+"対応サイト:\n"
+"    - https://deepwiki.com/owner/repo （パブリック、ログイン不要）\n"
+"    - https://app.devin.ai/wiki/owner/repo （要ログイン）\n"
+"\n"
+"オプション:\n"
+"    --output, -o        出力ディレクトリ（デフォルト: output）\n"
+"    --lang, -l          言語選択（デフォルト: japanese）\n"
+"                        ※ deepwiki.comでは言語選択は無効です\n"
+"                        例: japanese, english, chinese, korean, etc.\n"
+"    --diagram_type, -d  図の出力形式（デフォルト: mermaid,svg）\n"
+"                        png: PNG画像のみ出力\n"
+"                        svg: SVG画像のみ出力\n"
+"                        mermaid: Mermaid記法のみ出力\n"
+"                        複数指定可（カンマ区切り）: png,mermaid,svg\n"
+"                        先頭の形式が直接表示、それ以外はdetailsで折りたたみ\n"
+"\n"
+"例:\n"
+"    # deepwiki.com（パブリック）\n"
+"    python deepwiki2md.py https://deepwiki.com/microsoft/vscode\n"
+"    python deepwiki2md.py https://deepwiki.com/owner/repo -o ./output\n"
+"    \n"
+"    # app.devin.ai/wiki（要ログイン）\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --lang english\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -o ./output -l japanese\n"
+"    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -d png,mermaid,svg\n"
+"\n"
+"必要なパッケージ:\n"
+"    pip install selenium beautifulsoup4 webdriver-manager\n"
+"\n"
+"注意:\n"
+"    - Chrome/Chromiumブラウザが必要です\n"
+"    - app.devin.ai/wikiは初回実行時にログインが必要です（セッションは保持されます）\n"
+"    - deepwiki.comはログイン不要です\n"
+"    - PNG出力はブラウザでSVGをレンダリングして生成します\n"

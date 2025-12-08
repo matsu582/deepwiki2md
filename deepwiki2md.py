@@ -21,7 +21,40 @@ import json
 import platform
 import html
 import tempfile
+import gettext
+import locale
 from pathlib import Path
+
+# 多言語化設定（環境変数LANGに基づく）
+def setup_i18n():
+    """gettextによる多言語化を設定"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    locale_dir = os.path.join(script_dir, 'locale')
+    
+    # 環境変数LANGから言語を取得
+    lang = os.environ.get('LANG', '')
+    
+    # jaで始まる場合は日本語、それ以外は英語
+    if lang.startswith('ja'):
+        language = 'ja'
+    else:
+        language = 'en'
+    
+    try:
+        # 翻訳オブジェクトを取得
+        translation = gettext.translation(
+            'deepwiki2md',
+            localedir=locale_dir,
+            languages=[language],
+            fallback=True
+        )
+        return translation.gettext
+    except Exception:
+        # 翻訳ファイルが見つからない場合はデフォルト（英語）を返す
+        return lambda x: x
+
+# グローバル翻訳関数
+_ = setup_i18n()
 
 # Seleniumのインポート
 try:
@@ -33,8 +66,8 @@ try:
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import TimeoutException, NoSuchElementException
 except ImportError:
-    print("エラー: seleniumがインストールされていません")
-    print("インストール: pip install selenium")
+    print(_("Error: selenium is not installed"))
+    print(_("Install: pip install selenium"))
     sys.exit(1)
 
 # webdriver-managerのインポート（クロスプラットフォーム対応）
@@ -43,15 +76,15 @@ try:
     HAS_WEBDRIVER_MANAGER = True
 except ImportError:
     HAS_WEBDRIVER_MANAGER = False
-    print("警告: webdriver-managerがインストールされていません")
-    print("自動ChromeDriver管理を使用するには: pip install webdriver-manager")
+    print(_("Warning: webdriver-manager is not installed"))
+    print(_("For automatic ChromeDriver management: pip install webdriver-manager"))
 
 # BeautifulSoupのインポート
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    print("エラー: beautifulsoup4がインストールされていません")
-    print("インストール: pip install beautifulsoup4")
+    print(_("Error: beautifulsoup4 is not installed"))
+    print(_("Install: pip install beautifulsoup4"))
     sys.exit(1)
 
 # PNG変換はSeleniumのelement.screenshot()を使用
@@ -66,7 +99,7 @@ try:
     HAS_MERMAID_CONVERTER = True
 except ImportError:
     HAS_MERMAID_CONVERTER = False
-    print("警告: extract_subgraphs.pyが見つかりません。Mermaid変換は無効です。")
+    print(_("Warning: extract_subgraphs.py not found. Mermaid conversion is disabled."))
 
 
 # SVGのcamelCase要素マッピング（BeautifulSoupのhtml.parserが小文字化するため）
@@ -140,7 +173,7 @@ class DeepWikiExporter:
         else:
             # デフォルトはdeepwiki.com形式として扱う
             self.site_type = self.SITE_DEEPWIKI
-        print(f"サイト種別: {self.site_type}")
+        print(_("Site type: {}").format(self.site_type))
     
     def setup_browser(self, headless=False):
         """ブラウザを設定（クロスプラットフォーム対応）"""
@@ -180,8 +213,8 @@ class DeepWikiExporter:
                 service = Service(ChromeDriverManager().install())
                 self.driver = webdriver.Chrome(service=service, options=options)
             except Exception as e:
-                print(f"webdriver-managerでのChromeDriver取得に失敗: {e}")
-                print("システムのChromeDriverを使用します...")
+                print(_("Failed to get ChromeDriver via webdriver-manager: {}").format(e))
+                print(_("Using system ChromeDriver..."))
                 self.driver = webdriver.Chrome(options=options)
         else:
             self.driver = webdriver.Chrome(options=options)
@@ -191,13 +224,13 @@ class DeepWikiExporter:
     
     def navigate_and_wait_for_login(self, url, headless=False, email=None):
         """URLに移動し、ユーザーのログインを待つ"""
-        print(f"\nブラウザを開いています: {url}")
+        print(_("\nOpening browser: {}").format(url))
         self.driver.get(url)
         
         # ページ読み込み待機（deepwiki.comは短縮）
         if self.site_type == self.SITE_DEEPWIKI:
             time.sleep(1)
-            print("deepwiki.com: ログイン不要")
+            print(_("deepwiki.com: No login required"))
             self.wait_for_page_load(timeout=3)
             return True
         
@@ -211,18 +244,18 @@ class DeepWikiExporter:
                 if self._is_login_page() or self._is_code_page():
                     login_success = self._handle_cui_login(email=email)
                     if not login_success:
-                        print("ログインに失敗しました。終了します。")
+                        print(_("Login failed. Exiting."))
                         return False
                     # ログイン後、元のURLに戻る
                     self.driver.get(url)
             else:
                 # GUIモード: ユーザーに手動ログインを促す
                 print("\n" + "="*60)
-                print("ログインが必要です。")
+                print(_("Login required."))
                 
                 # -eオプションでメールアドレスが指定されている場合は自動入力してContinueボタンをクリック
                 if email and self._is_login_page():
-                    print(f"メールアドレスを自動入力します: {email}")
+                    print(_("Auto-filling email address: {}").format(email))
                     try:
                         email_input = self.driver.find_element(By.ID, 'username')
                         email_input.clear()
@@ -234,16 +267,16 @@ class DeepWikiExporter:
                             'button[type="submit"][name="action"][value="default"]'
                         )
                         continue_btn.click()
-                        print("メールアドレスを入力し、Continueボタンをクリックしました。")
-                        print("認証コードがメールに送信されます。")
+                        print(_("Email entered and Continue button clicked."))
+                        print(_("Authentication code will be sent to your email."))
                         time.sleep(3)
                     except Exception as e:
-                        print(f"メールアドレス自動入力に失敗: {e}")
+                        print(_("Failed to auto-fill email: {}").format(e))
                 
-                print("ブラウザでログインを完了してください。")
-                print("ログイン完了後、このターミナルでEnterキーを押してください。")
+                print(_("Please complete login in the browser."))
+                print(_("Press Enter in this terminal after login is complete."))
                 print("="*60 + "\n")
-                input(">>> ログイン完了後、Enterキーを押してください: ")
+                input(_(">>> Press Enter after login is complete: "))
                 
                 # ログイン後、元のURLに戻る
                 self.driver.get(url)
@@ -278,7 +311,7 @@ class DeepWikiExporter:
             time.sleep(extra_wait)
             
         except Exception as e:
-            print(f"  警告: ページ読み込み待機中にエラー: {e}")
+            print(_("  Warning: Error while waiting for page load: {}").format(e))
     
     def _is_login_page(self):
         """ログインページかどうかを判定（メールアドレス入力ページ）"""
@@ -303,18 +336,18 @@ class DeepWikiExporter:
         for attempt in range(max_attempts):
             if self._is_login_page():
                 print("\n" + "="*60)
-                print("ログインページを検出しました（ヘッドレスモード）")
+                print(_("Login page detected (headless mode)"))
                 print("="*60)
                 
                 # emailが指定されていない場合は入力プロンプトを表示
                 if email:
                     email_to_use = email
-                    print(f"メールアドレス: {email_to_use}")
+                    print(_("Email address: {}").format(email_to_use))
                 else:
-                    email_to_use = input("メールアドレスを入力してください: ").strip()
+                    email_to_use = input(_("Enter email address: ")).strip()
                 
                 if not email_to_use:
-                    print("メールアドレスが入力されていません")
+                    print(_("Email address not entered"))
                     continue
                 
                 try:
@@ -330,18 +363,18 @@ class DeepWikiExporter:
                     
                     time.sleep(3)
                 except Exception as e:
-                    print(f"メールアドレス入力エラー: {e}")
+                    print(_("Email input error: {}").format(e))
                     continue
             
             if self._is_code_page():
                 print("\n" + "="*60)
-                print("認証コード入力ページを検出しました")
-                print("メールに送信された認証コードを入力してください")
+                print(_("Authentication code input page detected"))
+                print(_("Please enter the authentication code sent to your email"))
                 print("="*60)
                 
-                code = input("認証コードを入力してください: ").strip()
+                code = input(_("Enter authentication code: ")).strip()
                 if not code:
-                    print("認証コードが入力されていません")
+                    print(_("Authentication code not entered"))
                     continue
                 
                 try:
@@ -357,19 +390,19 @@ class DeepWikiExporter:
                     
                     time.sleep(3)
                 except Exception as e:
-                    print(f"認証コード入力エラー: {e}")
+                    print(_("Authentication code input error: {}").format(e))
                     continue
             
             if not self._is_login_page() and not self._is_code_page():
-                print("ログイン成功")
+                print(_("Login successful"))
                 return True
         
-        print("ログインに失敗しました")
+        print(_("Login failed"))
         return False
     
     def select_language(self, lang):
         """言語プルダウンから指定された言語を選択（Radix UI対応）"""
-        print(f"\n言語を選択中: {lang}")
+        print(_("\nSelecting language: {}").format(lang))
         
         # 言語名のマッピング（引数 -> 表示名）
         lang_map = {
@@ -405,7 +438,7 @@ class DeepWikiExporter:
                         text = elem.text.strip()
                         if text in lang_map.values() or any(l in text for l in lang_map.values()):
                             dropdown = elem
-                            print(f"  言語プルダウンを検出: {selector} (現在: {text})")
+                            print(_("  Language dropdown detected: {} (current: {})").format(selector, text))
                             break
                     if dropdown:
                         break
@@ -413,13 +446,13 @@ class DeepWikiExporter:
                     continue
             
             if not dropdown:
-                print("  警告: 言語プルダウンが見つかりません")
+                print(_("  Warning: Language dropdown not found"))
                 return False
             
             # 現在の言語を確認
             current_lang = dropdown.text.strip()
             if current_lang.lower() == target_lang.lower():
-                print(f"  既に {target_lang} が選択されています")
+                print(_("  {} is already selected").format(target_lang))
                 return True
             
             # 通知バナーを非表示にする（クリックを妨げる要素を除去）
@@ -453,7 +486,7 @@ class DeepWikiExporter:
                         opt_text = opt.text.strip()
                         if opt_text.lower() == target_lang.lower():
                             opt.click()
-                            print(f"  言語を選択: {opt_text}")
+                            print(_("  Language selected: {}").format(opt_text))
                             time.sleep(1)
                             self.wait_for_page_load()
                             return True
@@ -467,14 +500,14 @@ class DeepWikiExporter:
                     f"//*[@role='option' and contains(text(), '{target_lang}')]"
                 )
                 option.click()
-                print(f"  言語を選択: {target_lang}")
+                print(_("  Language selected: {}").format(target_lang))
                 time.sleep(1)
                 self.wait_for_page_load()
                 return True
             except:
                 pass
             
-            print(f"  警告: 言語 '{target_lang}' が見つかりません")
+            print(_("  Warning: Language '{}' not found").format(target_lang))
             # ドロップダウンを閉じる
             try:
                 dropdown.click()
@@ -483,7 +516,7 @@ class DeepWikiExporter:
             return False
                 
         except Exception as e:
-            print(f"  言語選択エラー: {e}")
+            print(_("  Language selection error: {}").format(e))
             return False
     
     def get_wiki_sections(self):
@@ -499,7 +532,7 @@ class DeepWikiExporter:
                 sections = self._get_sections_devin()
             
         except Exception as e:
-            print(f"  セクション取得エラー: {e}")
+            print(_("  Section retrieval error: {}").format(e))
             import traceback
             traceback.print_exc()
         
@@ -545,10 +578,10 @@ class DeepWikiExporter:
             time.sleep(1)
         
         if links and best_selector:
-            print(f"  サイドバーを検出: {best_selector} ({len(links)}項目)")
+            print(_("  Sidebar detected: {} ({} items)").format(best_selector, len(links)))
         
         if not links:
-            print("  警告: サイドバーのリンク要素が見つかりません")
+            print(_("  Warning: Sidebar link elements not found"))
             return sections
         
         # 各リンクの情報を収集
@@ -579,15 +612,15 @@ class DeepWikiExporter:
                 })
                 
             except Exception as e:
-                print(f"  リンク情報取得エラー (index={idx}): {e}")
+                print(_("  Link info retrieval error (index={}): {}").format(idx, e))
                 continue
         
-        print(f"  取得したセクション数: {len(sections)}")
+        print(_("  Retrieved sections: {}").format(len(sections)))
         for s in sections[:5]:
             indent = "  " * s['level']
-            print(f"    {indent}[L{s['level']}] {s['title']}")
+            print("    {}[L{}] {}".format(indent, s['level'], s['title']))
         if len(sections) > 5:
-            print(f"    ... 他 {len(sections) - 5} 件")
+            print(_("    ... and {} more").format(len(sections) - 5))
         
         return sections
     
@@ -624,10 +657,10 @@ class DeepWikiExporter:
             time.sleep(1)
         
         if buttons and best_selector:
-            print(f"  サイドバーを検出: {best_selector} ({len(buttons)}項目)")
+            print(_("  Sidebar detected: {} ({} items)").format(best_selector, len(buttons)))
         
         if not buttons:
-            print("  警告: サイドバーのbutton要素が見つかりません")
+            print(_("  Warning: Sidebar button elements not found"))
             return sections
         
         # 各buttonのメタ情報を取得（padding-leftから階層を判定）
@@ -646,7 +679,7 @@ class DeepWikiExporter:
         sorted_paddings = sorted(padding_values)
         padding_to_level = {p: i for i, p in enumerate(sorted_paddings)}
         
-        print(f"  検出された階層レベル: {len(sorted_paddings)}段階")
+        print(_("  Detected hierarchy levels: {} levels").format(len(sorted_paddings)))
         
         # 各buttonの情報を収集
         for idx, btn in enumerate(buttons):
@@ -670,21 +703,21 @@ class DeepWikiExporter:
                 })
                 
             except Exception as e:
-                print(f"  button情報取得エラー (index={idx}): {e}")
+                print(_("  Button info retrieval error (index={}): {}").format(idx, e))
                 continue
         
-        print(f"  取得したセクション数: {len(sections)}")
+        print(_("  Retrieved sections: {}").format(len(sections)))
         for s in sections[:5]:
             indent = "  " * s['level']
-            print(f"    {indent}[L{s['level']}] {s['title']}")
+            print("    {}[L{}] {}".format(indent, s['level'], s['title']))
         if len(sections) > 5:
-            print(f"    ... 他 {len(sections) - 5} 件")
+            print(_("    ... and {} more").format(len(sections) - 5))
         
         return sections
     
     def scroll_to_load_all_content(self):
         """ページ全体をスクロールして遅延読み込みコンテンツを取得"""
-        print("  ページをスクロールしてコンテンツを読み込み中...")
+        print(_("  Scrolling page to load content..."))
         
         try:
             # ページの高さを取得
@@ -707,7 +740,7 @@ class DeepWikiExporter:
             time.sleep(1)
             
         except Exception as e:
-            print(f"  スクロールエラー: {e}")
+            print(_("  Scroll error: {}").format(e))
     
     def extract_page_html(self):
         """現在のページのHTMLを取得"""
@@ -734,7 +767,7 @@ class DeepWikiExporter:
             return html
             
         except Exception as e:
-            print(f"  HTML取得エラー: {e}")
+            print(_("  HTML retrieval error: {}").format(e))
             return ""
     
     def convert_html_to_markdown(self, html_content, page_name):
@@ -1101,7 +1134,7 @@ class DeepWikiExporter:
                     f.write(svg_str_export)
                 outputs['svg'] = f"![図](images/{svg_filename})"
             except Exception as e:
-                print(f"  SVG保存エラー: {e}")
+                print(_("  SVG save error: {}").format(e))
         
         # PNG出力（SVGを保存してから後でブラウザで変換）
         if 'png' in self.diagram_types:
@@ -1114,7 +1147,7 @@ class DeepWikiExporter:
                     with open(svg_for_png_path, 'w', encoding='utf-8') as f:
                         f.write(svg_str_export)
                 except Exception as e:
-                    print(f"  SVG保存エラー（PNG用）: {e}")
+                    print(_("  SVG save error (for PNG): {}").format(e))
             # PNG変換をキューに追加（後で一括処理）
             self.pending_png_conversions.append((svg_for_png_path, png_path))
             outputs['png'] = f"![図](images/{png_filename})"
@@ -1127,7 +1160,7 @@ class DeepWikiExporter:
                     if mermaid_code and len(mermaid_code) > 20:
                         outputs['mermaid'] = f"```mermaid\n{mermaid_code}\n```"
                 except Exception as e:
-                    print(f"  Mermaid変換エラー: {e}")
+                    print(_("  Mermaid conversion error: {}").format(e))
         
         if not outputs:
             return ''
@@ -1160,7 +1193,7 @@ class DeepWikiExporter:
         elem_index = section['index']
         level = section['level']
         
-        print(f"\n[{chapter_number}] エクスポート中: {title} (レベル{level})")
+        print(_("\n[{}] Exporting: {} (level {})").format(chapter_number, title, level))
         
         try:
             if self.site_type == self.SITE_DEEPWIKI:
@@ -1174,7 +1207,7 @@ class DeepWikiExporter:
             self.wait_for_page_load()
             
         except Exception as e:
-            print(f"  ナビゲーションエラー: {e}")
+            print(_("  Navigation error: {}").format(e))
             return None
         
         # HTMLを取得
@@ -1197,7 +1230,7 @@ class DeepWikiExporter:
         with open(md_path, 'w', encoding='utf-8') as f:
             f.write(md_content)
         
-        print(f"  保存完了: {md_path}")
+        print(_("  Saved: {}").format(md_path))
         
         return {
             'chapter_number': chapter_number,
@@ -1246,7 +1279,7 @@ class DeepWikiExporter:
                 link.click()
                 return
             except Exception as e:
-                print(f"  リンククリック失敗、URLナビゲーションにフォールバック: {e}")
+                print(_("  Link click failed, falling back to URL navigation: {}").format(e))
         
         # フォールバック: 直接URLに移動
         if href:
@@ -1254,7 +1287,7 @@ class DeepWikiExporter:
                 href = f"https://deepwiki.com{href}"
             self.driver.get(href)
         else:
-            raise Exception(f"リンク index {elem_index} が範囲外で、hrefも取得できません")
+            raise Exception(_("Link index {} is out of range and href is not available").format(elem_index))
     
     def _navigate_devin(self, btn_index):
         """app.devin.ai/wiki用のナビゲーション（ボタンクリック）"""
@@ -1276,14 +1309,14 @@ class DeepWikiExporter:
                 continue
         
         if btn_index >= len(buttons):
-            raise Exception(f"button index {btn_index} が範囲外です")
+            raise Exception(_("Button index {} is out of range").format(btn_index))
         
         btn = buttons[btn_index]
         try:
             WebDriverWait(self.driver, 3).until(EC.element_to_be_clickable(btn))
             btn.click()
         except Exception as click_err:
-            print(f"  クリック待機エラー、直接クリックを試行: {click_err}")
+            print(_("  Click wait error, trying direct click: {}").format(click_err))
             btn.click()
     
     def generate_chapter_numbers(self, sections):
@@ -1314,7 +1347,7 @@ class DeepWikiExporter:
     def export_all(self, base_url):
         """全セクションをエクスポート"""
         print("\n" + "="*60)
-        print("DeepWikiエクスポートを開始します")
+        print(_("Starting DeepWiki export"))
         print("="*60)
         
         # ベースURLを保存（内部リンク変換で使用）
@@ -1328,7 +1361,7 @@ class DeepWikiExporter:
         sections = self.get_wiki_sections()
         
         if not sections:
-            print("\nセクションが見つかりません。現在のページのみエクスポートします。")
+            print(_("\nNo sections found. Exporting current page only."))
             self.scroll_to_load_all_content()
             html_content = self.extract_page_html()
             md_content = self.convert_html_to_markdown(html_content, 'main')
@@ -1337,10 +1370,10 @@ class DeepWikiExporter:
             with open(md_path, 'w', encoding='utf-8') as f:
                 f.write(md_content)
             
-            print(f"保存完了: {md_path}")
+            print(_("Saved: {}").format(md_path))
             return
         
-        print(f"\n検出されたセクション数: {len(sections)}")
+        print(_("\nDetected sections: {}").format(len(sections)))
         
         # 階層的な章番号を生成
         chapter_numbers = self.generate_chapter_numbers(sections)
@@ -1364,9 +1397,9 @@ class DeepWikiExporter:
             self.process_pending_png_conversions()
         
         print("\n" + "="*60)
-        print("エクスポート完了!")
-        print(f"出力ディレクトリ: {self.output_dir}")
-        print(f"エクスポートされたファイル数: {len(exported)}")
+        print(_("Export completed!"))
+        print(_("Output directory: {}").format(self.output_dir))
+        print(_("Exported files: {}").format(len(exported)))
         print("="*60)
     
     def convert_internal_links(self, exported):
@@ -1374,7 +1407,7 @@ class DeepWikiExporter:
         if not exported:
             return
         
-        print("\n内部リンクを変換中...")
+        print(_("\nConverting internal links..."))
         
         # セクション番号→ファイル名のマッピングを作成
         link_map = {}
@@ -1463,13 +1496,13 @@ class DeepWikiExporter:
                 converted_count += 1
         
         if converted_count > 0:
-            print(f"  {converted_count}ファイルのリンクを変換しました")
+            print(_("  Converted links in {} files").format(converted_count))
         else:
-            print("  変換対象のリンクはありませんでした")
+            print(_("  No links to convert"))
     
     def generate_table_of_contents(self, exported):
         """目次ファイルを生成（階層構造対応）"""
-        toc_lines = ["# 目次\n\n"]
+        toc_lines = [_("# Table of Contents") + "\n\n"]
         
         for item in exported:
             # 階層レベルに応じてインデントを追加
@@ -1482,7 +1515,7 @@ class DeepWikiExporter:
         with open(toc_path, 'w', encoding='utf-8') as f:
             f.writelines(toc_lines)
         
-        print(f"\n目次を生成: {toc_path}")
+        print(_("\nGenerated table of contents: {}").format(toc_path))
     
     def sanitize_filename(self, name):
         """ファイル名として安全な文字列に変換"""
@@ -1497,7 +1530,7 @@ class DeepWikiExporter:
         if self.png_driver is not None:
             return  # 既に起動済み
         
-        print("\nPNG変換用ブラウザを起動中...")
+        print(_("\nStarting browser for PNG conversion..."))
         options = Options()
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
@@ -1511,7 +1544,7 @@ class DeepWikiExporter:
                 service = Service(ChromeDriverManager().install())
                 self.png_driver = webdriver.Chrome(service=service, options=options)
             except Exception as e:
-                print(f"  webdriver-managerでのChromeDriver取得に失敗: {e}")
+                print(_("  Failed to get ChromeDriver via webdriver-manager: {}").format(e))
                 self.png_driver = webdriver.Chrome(options=options)
         else:
             self.png_driver = webdriver.Chrome(options=options)
@@ -1523,7 +1556,7 @@ class DeepWikiExporter:
                 {"color": {"r": 0, "g": 0, "b": 0, "a": 0}}
             )
         except Exception as e:
-            print(f"  背景透過設定に失敗: {e}")
+            print(_("  Failed to set transparent background: {}").format(e))
     
     def _fix_svg_dimensions(self, svg_content):
         """SVGのwidth/heightがない場合、viewBoxから補完する"""
@@ -1650,7 +1683,7 @@ class DeepWikiExporter:
                     pass
                     
         except Exception as e:
-            print(f"  PNG変換エラー ({os.path.basename(svg_path)}): {e}")
+            print(_("  PNG conversion error ({}): {}").format(os.path.basename(svg_path), e))
             return False
     
     def process_pending_png_conversions(self):
@@ -1658,7 +1691,7 @@ class DeepWikiExporter:
         if not self.pending_png_conversions:
             return
         
-        print(f"\n{len(self.pending_png_conversions)}個のSVGをPNGに変換中...")
+        print(_("\nConverting {} SVGs to PNG...").format(len(self.pending_png_conversions)))
         
         # PNG変換用ブラウザを起動
         self.setup_png_browser()
@@ -1668,7 +1701,7 @@ class DeepWikiExporter:
             if self.convert_svg_to_png(svg_path, png_path):
                 success_count += 1
         
-        print(f"  PNG変換完了: {success_count}/{len(self.pending_png_conversions)}")
+        print(_("  PNG conversion completed: {}/{}").format(success_count, len(self.pending_png_conversions)))
         self.pending_png_conversions = []
     
     def close(self):
@@ -1681,48 +1714,49 @@ class DeepWikiExporter:
 
 def print_usage():
     """使用方法を表示"""
-    print("""
-DeepWikiエクスポートツール
+    usage_text = _("""
+DeepWiki Export Tool
 
-使用方法:
-    python deepwiki2md.py <DeepWiki URL> [オプション]
+Usage:
+    python deepwiki2md.py <DeepWiki URL> [options]
 
-対応サイト:
-    - https://deepwiki.com/owner/repo （パブリック、ログイン不要）
-    - https://app.devin.ai/wiki/owner/repo （要ログイン）
+Supported sites:
+    - https://deepwiki.com/owner/repo (public, no login required)
+    - https://app.devin.ai/wiki/owner/repo (login required)
 
-オプション:
-    --output, -o        出力ディレクトリ（デフォルト: output
-    --lang, -l          言語選択（デフォルト: japanese）
-                        ※ deepwiki.comでは言語選択は無効です
-                        例: japanese, english, chinese, korean, etc.
-    --diagram_type, -d  図の出力形式（デフォルト: mermaid,svg）
-                        png: PNG画像のみ出力
-                        svg: SVG画像のみ出力
-                        mermaid: Mermaid記法のみ出力
-                        複数指定可（カンマ区切り）: png,mermaid,svg
-                        先頭の形式が直接表示、それ以外はdetailsで折りたたみ
+Options:
+    --output, -o        Output directory (default: output)
+    --lang, -l          Language selection (default: japanese)
+                        * Language selection is disabled for deepwiki.com
+                        Examples: japanese, english, chinese, korean, etc.
+    --diagram_type, -d  Diagram output format (default: mermaid,svg)
+                        png: PNG image only
+                        svg: SVG image only
+                        mermaid: Mermaid notation only
+                        Multiple formats (comma-separated): png,mermaid,svg
+                        First format displays inline, others collapse in details
 
-例:
-    # deepwiki.com（パブリック）
+Examples:
+    # deepwiki.com (public)
     python deepwiki2md.py https://deepwiki.com/microsoft/vscode
     python deepwiki2md.py https://deepwiki.com/owner/repo -o ./output
     
-    # app.devin.ai/wiki（要ログイン）
+    # app.devin.ai/wiki (login required)
     python deepwiki2md.py https://app.devin.ai/wiki/owner/repo
     python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --lang english
     python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -o ./output -l japanese
     python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -d png,mermaid,svg
 
-必要なパッケージ:
+Required packages:
     pip install selenium beautifulsoup4 webdriver-manager
 
-注意:
-    - Chrome/Chromiumブラウザが必要です
-    - app.devin.ai/wikiは初回実行時にログインが必要です（セッションは保持されます）
-    - deepwiki.comはログイン不要です
-    - PNG出力はブラウザでSVGをレンダリングして生成します
+Notes:
+    - Chrome/Chromium browser is required
+    - app.devin.ai/wiki requires login on first run (session is preserved)
+    - deepwiki.com does not require login
+    - PNG output is generated by rendering SVG in browser
 """)
+    print(usage_text)
 
 
 def main():
@@ -1730,18 +1764,18 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description='DeepWikiエクスポートツール',
+        description=_('DeepWiki Export Tool'),
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('url', help='DeepWiki URL (例: https://deepwiki.com/owner/repo または https://app.devin.ai/wiki/owner/repo)')
-    parser.add_argument('-o', '--output', default='output', help='出力ディレクトリ（デフォルト: output')
-    parser.add_argument('-l', '--lang', default='japanese', help='言語選択（デフォルト: japanese）※deepwiki.comでは無効')
+    parser.add_argument('url', help=_('DeepWiki URL (e.g., https://deepwiki.com/owner/repo or https://app.devin.ai/wiki/owner/repo)'))
+    parser.add_argument('-o', '--output', default='output', help=_('Output directory (default: output)'))
+    parser.add_argument('-l', '--lang', default='japanese', help=_('Language selection (default: japanese) *disabled for deepwiki.com'))
     parser.add_argument('-d', '--diagram_type', default='mermaid,svg', 
-                        help='図の出力形式（デフォルト: mermaid,svg）。png/svg/mermaidをカンマ区切りで指定')
+                        help=_('Diagram output format (default: mermaid,svg). Specify png/svg/mermaid comma-separated'))
     parser.add_argument('--no-headless', action='store_true',
-                        help='GUIモードで実行（ブラウザ画面を表示）')
+                        help=_('Run in GUI mode (show browser window)'))
     parser.add_argument('-e', '--email', default=None,
-                        help='ログイン用メールアドレス（指定しない場合は入力プロンプトを表示）')
+                        help=_('Email address for login (prompts if not specified)'))
     
     args = parser.parse_args()
     
@@ -1750,7 +1784,7 @@ def main():
     
     # URLの検証
     if not args.url.startswith('http'):
-        print("エラー: 有効なURLを指定してください")
+        print(_("Error: Please specify a valid URL"))
         print_usage()
         sys.exit(1)
     
@@ -1761,7 +1795,7 @@ def main():
     
     try:
         # ブラウザを起動
-        print("ブラウザを起動中...")
+        print(_("Starting browser..."))
         exporter.setup_browser(headless=args.headless)
         
         # ログインを待つ（deepwiki.comの場合はスキップ）
@@ -1771,15 +1805,15 @@ def main():
         if args.lang and exporter.site_type == DeepWikiExporter.SITE_DEVIN:
             exporter.select_language(args.lang)
         elif exporter.site_type == DeepWikiExporter.SITE_DEEPWIKI:
-            print("deepwiki.com: 言語選択はスキップします")
+            print(_("deepwiki.com: Skipping language selection"))
         
         # 全セクションをエクスポート
         exporter.export_all(args.url)
         
     except KeyboardInterrupt:
-        print("\n\n中断されました。")
+        print(_("\n\nInterrupted."))
     except Exception as e:
-        print(f"\nエラー: {e}")
+        print(_("\nError: {}").format(e))
         import traceback
         traceback.print_exc()
     finally:
