@@ -220,14 +220,23 @@ class DeepWikiExporter:
                 print("\n" + "="*60)
                 print("ログインが必要です。")
                 
-                # -eオプションでメールアドレスが指定されている場合は自動入力
+                # -eオプションでメールアドレスが指定されている場合は自動入力してContinueボタンをクリック
                 if email and self._is_login_page():
                     print(f"メールアドレスを自動入力します: {email}")
                     try:
                         email_input = self.driver.find_element(By.ID, 'username')
                         email_input.clear()
                         email_input.send_keys(email)
-                        print("メールアドレスを入力しました。続行ボタンをクリックしてください。")
+                        
+                        # Continueボタンをクリック
+                        continue_btn = self.driver.find_element(
+                            By.CSS_SELECTOR,
+                            'button[type="submit"][name="action"][value="default"]'
+                        )
+                        continue_btn.click()
+                        print("メールアドレスを入力し、Continueボタンをクリックしました。")
+                        print("認証コードがメールに送信されます。")
+                        time.sleep(3)
                     except Exception as e:
                         print(f"メールアドレス自動入力に失敗: {e}")
                 
