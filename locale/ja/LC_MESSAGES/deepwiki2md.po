@@ -15,6 +15,27 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "Error: selenium is not installed"
+msgstr "エラー: seleniumがインストールされていません"
+
+msgid "Install: pip install selenium"
+msgstr "インストール: pip install selenium"
+
+msgid "Warning: webdriver-manager is not installed"
+msgstr "警告: webdriver-managerがインストールされていません"
+
+msgid "For automatic ChromeDriver management: pip install webdriver-manager"
+msgstr "自動ChromeDriver管理を使用するには: pip install webdriver-manager"
+
+msgid "Error: beautifulsoup4 is not installed"
+msgstr "エラー: beautifulsoup4がインストールされていません"
+
+msgid "Install: pip install beautifulsoup4"
+msgstr "インストール: pip install beautifulsoup4"
+
+msgid "Warning: extract_subgraphs.py not found. Mermaid conversion is disabled."
+msgstr "警告: extract_subgraphs.pyが見つかりません。Mermaid変換は無効です。"
+
 msgid "Site type: {}"
 msgstr "サイト種別: {}"
 

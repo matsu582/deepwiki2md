@@ -66,8 +66,8 @@ try:
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import TimeoutException, NoSuchElementException
 except ImportError:
-    print("エラー: seleniumがインストールされていません")
-    print("インストール: pip install selenium")
+    print(_("Error: selenium is not installed"))
+    print(_("Install: pip install selenium"))
     sys.exit(1)
 
 # webdriver-managerのインポート（クロスプラットフォーム対応）
@@ -76,15 +76,15 @@ try:
     HAS_WEBDRIVER_MANAGER = True
 except ImportError:
     HAS_WEBDRIVER_MANAGER = False
-    print("警告: webdriver-managerがインストールされていません")
-    print("自動ChromeDriver管理を使用するには: pip install webdriver-manager")
+    print(_("Warning: webdriver-manager is not installed"))
+    print(_("For automatic ChromeDriver management: pip install webdriver-manager"))
 
 # BeautifulSoupのインポート
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    print("エラー: beautifulsoup4がインストールされていません")
-    print("インストール: pip install beautifulsoup4")
+    print(_("Error: beautifulsoup4 is not installed"))
+    print(_("Install: pip install beautifulsoup4"))
     sys.exit(1)
 
 # PNG変換はSeleniumのelement.screenshot()を使用
@@ -99,7 +99,7 @@ try:
     HAS_MERMAID_CONVERTER = True
 except ImportError:
     HAS_MERMAID_CONVERTER = False
-    print("警告: extract_subgraphs.pyが見つかりません。Mermaid変換は無効です。")
+    print(_("Warning: extract_subgraphs.py not found. Mermaid conversion is disabled."))
 
 
 # SVGのcamelCase要素マッピング（BeautifulSoupのhtml.parserが小文字化するため）
