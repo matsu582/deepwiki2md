@@ -146,16 +146,24 @@ class DeepWikiExporter:
         """ブラウザを設定（クロスプラットフォーム対応）"""
         options = Options()
         
-        if headless:
-            options.add_argument('--headless')
+        # OS判定
+        system = platform.system()
         
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--window-size=1920,1080')
-        options.add_argument('--disable-gpu')
+        if headless:
+            # ヘッドレスモードの設定
+            options.add_argument('--headless')
+            options.add_argument('--window-size=1920,1080')
+            options.add_argument('--disable-gpu')
+            
+            # Linux専用オプション（コンテナ環境向け）
+            if system == 'Linux':
+                options.add_argument('--no-sandbox')
+                options.add_argument('--disable-dev-shm-usage')
+        else:
+            # GUIモードの設定
+            options.add_argument('--window-size=1920,1080')
         
         # ユーザーデータディレクトリを設定（セッション保持用）
-        system = platform.system()
         if system == 'Windows':
             user_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'DeepWiki2Md', 'chrome_profile')
         elif system == 'Darwin':  # macOS
@@ -211,6 +219,18 @@ class DeepWikiExporter:
                 # GUIモード: ユーザーに手動ログインを促す
                 print("\n" + "="*60)
                 print("ログインが必要です。")
+                
+                # -eオプションでメールアドレスが指定されている場合は自動入力
+                if email and self._is_login_page():
+                    print(f"メールアドレスを自動入力します: {email}")
+                    try:
+                        email_input = self.driver.find_element(By.ID, 'username')
+                        email_input.clear()
+                        email_input.send_keys(email)
+                        print("メールアドレスを入力しました。続行ボタンをクリックしてください。")
+                    except Exception as e:
+                        print(f"メールアドレス自動入力に失敗: {e}")
+                
                 print("ブラウザでログインを完了してください。")
                 print("ログイン完了後、このターミナルでEnterキーを押してください。")
                 print("="*60 + "\n")
