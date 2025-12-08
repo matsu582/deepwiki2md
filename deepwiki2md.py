@@ -1,0 +1,1656 @@
+#!/usr/bin/env python3
+"""
+DeepWikiエクスポートツール
+ユーザーが手動でログインした後、コンテンツを自動取得してMarkdownに変換する
+
+使用方法:
+1. ツールを起動: python deepwiki2md.py <repository_url>
+2. ブラウザが開くので、手動でログイン
+3. ログイン完了後、Enterキーを押す
+4. ツールが自動的にコンテンツを取得してMarkdownに変換
+
+対応プラットフォーム: Windows, Mac, Linux
+必要なパッケージ: selenium, beautifulsoup4, webdriver-manager
+"""
+
+import os
+import sys
+import time
+import re
+import json
+import platform
+import html
+import tempfile
+from pathlib import Path
+
+# Seleniumのインポート
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException, NoSuchElementException
+except ImportError:
+    print("エラー: seleniumがインストールされていません")
+    print("インストール: pip install selenium")
+    sys.exit(1)
+
+# webdriver-managerのインポート（クロスプラットフォーム対応）
+try:
+    from webdriver_manager.chrome import ChromeDriverManager
+    HAS_WEBDRIVER_MANAGER = True
+except ImportError:
+    HAS_WEBDRIVER_MANAGER = False
+    print("警告: webdriver-managerがインストールされていません")
+    print("自動ChromeDriver管理を使用するには: pip install webdriver-manager")
+
+# BeautifulSoupのインポート
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    print("エラー: beautifulsoup4がインストールされていません")
+    print("インストール: pip install beautifulsoup4")
+    sys.exit(1)
+
+# PNG変換はSeleniumのelement.screenshot()を使用
+# cairosvgはforeignObject（HTML埋め込み）を正しくレンダリングできないため不使用
+
+# 既存のMermaid変換モジュールをインポート
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+
+try:
+    from extract_subgraphs import extract_mermaid_from_svg
+    HAS_MERMAID_CONVERTER = True
+except ImportError:
+    HAS_MERMAID_CONVERTER = False
+    print("警告: extract_subgraphs.pyが見つかりません。Mermaid変換は無効です。")
+
+
+# SVGのcamelCase要素マッピング（BeautifulSoupのhtml.parserが小文字化するため）
+_SVG_CAMELCASE_TAGS = {
+    'foreignobject': 'foreignObject',
+    'lineargradient': 'linearGradient',
+    'radialgradient': 'radialGradient',
+    'clippath': 'clipPath',
+    'textpath': 'textPath',
+}
+
+_SVG_CAMELCASE_ATTRS = {
+    'viewbox': 'viewBox',
+    'preserveaspectratio': 'preserveAspectRatio',
+}
+
+
+def fix_svg_camelcase(svg_str):
+    """SVGのcamelCase要素と属性を正しいケースに修正"""
+    def replace_tag(match):
+        slash = match.group(1)
+        tag_name = match.group(2).lower()
+        if tag_name in _SVG_CAMELCASE_TAGS:
+            return f"<{slash}{_SVG_CAMELCASE_TAGS[tag_name]}"
+        return match.group(0)
+    
+    def replace_attr(match):
+        attr_name = match.group(1).lower()
+        if attr_name in _SVG_CAMELCASE_ATTRS:
+            return f" {_SVG_CAMELCASE_ATTRS[attr_name]}="
+        return match.group(0)
+    
+    result = re.sub(r'<(/?)([a-zA-Z]+)', replace_tag, svg_str)
+    result = re.sub(r' ([a-zA-Z]+)=', replace_attr, result)
+    return result
+
+
+class DeepWikiExporter:
+    """DeepWikiからコンテンツをエクスポートするクラス"""
+    
+    # サイト種別定数
+    SITE_DEVIN = 'devin'  # app.devin.ai/wiki
+    SITE_DEEPWIKI = 'deepwiki'  # deepwiki.com
+    
+    def __init__(self, output_dir='output', diagram_types=None):
+        self.output_dir = output_dir
+        self.driver = None
+        self.wait = None
+        self.svg_counter = 0
+        self.sections = []
+        self.png_driver = None  # PNG変換用のheadlessブラウザ
+        self.pending_png_conversions = []  # PNG変換待ちのSVGファイルリスト
+        self.site_type = None  # サイト種別（devin または deepwiki）
+        
+        # 図の出力形式（デフォルト: mermaid,svg）
+        if diagram_types is None:
+            self.diagram_types = ['mermaid', 'svg']
+        else:
+            self.diagram_types = [t.strip().lower() for t in diagram_types.split(',')]
+        
+        # 出力ディレクトリを作成
+        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
+    
+    def detect_site_type(self, url):
+        """URLからサイト種別を判定"""
+        if 'deepwiki.com' in url:
+            self.site_type = self.SITE_DEEPWIKI
+        elif 'app.devin.ai/wiki' in url:
+            self.site_type = self.SITE_DEVIN
+        else:
+            # デフォルトはdeepwiki.com形式として扱う
+            self.site_type = self.SITE_DEEPWIKI
+        print(f"サイト種別: {self.site_type}")
+    
+    def setup_browser(self, headless=False):
+        """ブラウザを設定（クロスプラットフォーム対応）"""
+        options = Options()
+        
+        if headless:
+            options.add_argument('--headless')
+        
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--disable-gpu')
+        
+        # ユーザーデータディレクトリを設定（セッション保持用）
+        system = platform.system()
+        if system == 'Windows':
+            user_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'DeepWiki2Md', 'chrome_profile')
+        elif system == 'Darwin':  # macOS
+            user_data_dir = os.path.expanduser('~/Library/Application Support/DeepWiki2Md/chrome_profile')
+        else:  # Linux
+            user_data_dir = os.path.expanduser('~/.config/deepwiki2md/chrome_profile')
+        
+        os.makedirs(user_data_dir, exist_ok=True)
+        options.add_argument(f'--user-data-dir={user_data_dir}')
+        
+        # ChromeDriverの設定
+        if HAS_WEBDRIVER_MANAGER:
+            try:
+                service = Service(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(service=service, options=options)
+            except Exception as e:
+                print(f"webdriver-managerでのChromeDriver取得に失敗: {e}")
+                print("システムのChromeDriverを使用します...")
+                self.driver = webdriver.Chrome(options=options)
+        else:
+            self.driver = webdriver.Chrome(options=options)
+        
+        self.wait = WebDriverWait(self.driver, 30)
+        return self.driver
+    
+    def navigate_and_wait_for_login(self, url):
+        """URLに移動し、ユーザーのログインを待つ"""
+        print(f"\nブラウザを開いています: {url}")
+        self.driver.get(url)
+        
+        # ページ読み込み待機（deepwiki.comは短縮）
+        if self.site_type == self.SITE_DEEPWIKI:
+            time.sleep(1)
+            print("deepwiki.com: ログイン不要")
+            self.wait_for_page_load(timeout=3)
+            return True
+        
+        time.sleep(3)
+        current_url = self.driver.current_url
+        
+        # app.devin.ai/wikiの場合はログインが必要かどうかを確認
+        if 'auth' in current_url or 'login' in current_url or 'sign' in current_url:
+            print("\n" + "="*60)
+            print("ログインが必要です。")
+            print("ブラウザでログインを完了してください。")
+            print("ログイン完了後、このターミナルでEnterキーを押してください。")
+            print("="*60 + "\n")
+            input(">>> ログイン完了後、Enterキーを押してください: ")
+            
+            # ログイン後、元のURLに戻る
+            self.driver.get(url)
+        
+        self.wait_for_page_load()
+        return True
+    
+    def wait_for_page_load(self, timeout=5):
+        """SPAのコンテンツが読み込まれるまで待機（高速版）"""
+        try:
+            # サイト種別に応じてセレクタを選択
+            if self.site_type == self.SITE_DEEPWIKI:
+                # deepwiki.com用の高速セレクタ（h1やarticleを優先）
+                selectors = ['h1', 'article', '[class*="content"]', 'main']
+                extra_wait = 0.2  # 追加待機を短縮
+            else:
+                # app.devin.ai/wiki用のセレクタ
+                selectors = ['[class*="content"]', '[class*="markdown"]', 'article', 'main', '.prose']
+                extra_wait = 0.5
+            
+            # 短いタイムアウトで各セレクタを試行
+            local_wait = WebDriverWait(self.driver, timeout)
+            
+            for selector in selectors:
+                try:
+                    local_wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                    break
+                except TimeoutException:
+                    continue
+            
+            # 最小限の追加待機（DOMの安定化用）
+            time.sleep(extra_wait)
+            
+        except Exception as e:
+            print(f"  警告: ページ読み込み待機中にエラー: {e}")
+    
+    def select_language(self, lang):
+        """言語プルダウンから指定された言語を選択（Radix UI対応）"""
+        print(f"\n言語を選択中: {lang}")
+        
+        # 言語名のマッピング（引数 -> 表示名）
+        lang_map = {
+            'japanese': 'Japanese',
+            'english': 'English',
+            'chinese': 'Chinese',
+            'korean': 'Korean',
+            'spanish': 'Spanish',
+            'french': 'French',
+            'german': 'German',
+            'portuguese': 'Portuguese',
+            'russian': 'Russian',
+            'italian': 'Italian'
+        }
+        
+        target_lang = lang_map.get(lang.lower(), lang.capitalize())
+        
+        try:
+            # Radix UIのコンボボックスを探す
+            dropdown_selectors = [
+                'button[role="combobox"]',
+                'button[data-slot="select-trigger"]',
+                '[data-state] button[aria-expanded]',
+                'button[aria-controls*="radix"]'
+            ]
+            
+            dropdown = None
+            for selector in dropdown_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for elem in elements:
+                        # 言語名が含まれているボタンを探す
+                        text = elem.text.strip()
+                        if text in lang_map.values() or any(l in text for l in lang_map.values()):
+                            dropdown = elem
+                            print(f"  言語プルダウンを検出: {selector} (現在: {text})")
+                            break
+                    if dropdown:
+                        break
+                except:
+                    continue
+            
+            if not dropdown:
+                print("  警告: 言語プルダウンが見つかりません")
+                return False
+            
+            # 現在の言語を確認
+            current_lang = dropdown.text.strip()
+            if current_lang.lower() == target_lang.lower():
+                print(f"  既に {target_lang} が選択されています")
+                return True
+            
+            # 通知バナーを非表示にする（クリックを妨げる要素を除去）
+            try:
+                self.driver.execute_script("""
+                    const banners = document.querySelectorAll('.bg-yellow-100, [class*="banner"], [class*="notification"]');
+                    banners.forEach(b => b.style.display = 'none');
+                """)
+            except:
+                pass
+            
+            # ドロップダウンをクリックして開く（JavaScriptで直接クリック）
+            try:
+                self.driver.execute_script("arguments[0].click();", dropdown)
+            except:
+                dropdown.click()
+            time.sleep(0.5)
+            
+            # ドロップダウンメニューから言語を選択
+            # Radix UIのオプションを探す
+            option_selectors = [
+                f'[role="option"]',
+                f'[data-slot="select-item"]',
+                f'[data-radix-collection-item]'
+            ]
+            
+            for selector in option_selectors:
+                try:
+                    options = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for opt in options:
+                        opt_text = opt.text.strip()
+                        if opt_text.lower() == target_lang.lower():
+                            opt.click()
+                            print(f"  言語を選択: {opt_text}")
+                            time.sleep(1)
+                            self.wait_for_page_load()
+                            return True
+                except:
+                    continue
+            
+            # XPathでテキスト検索（フォールバック）
+            try:
+                option = self.driver.find_element(
+                    By.XPATH,
+                    f"//*[@role='option' and contains(text(), '{target_lang}')]"
+                )
+                option.click()
+                print(f"  言語を選択: {target_lang}")
+                time.sleep(1)
+                self.wait_for_page_load()
+                return True
+            except:
+                pass
+            
+            print(f"  警告: 言語 '{target_lang}' が見つかりません")
+            # ドロップダウンを閉じる
+            try:
+                dropdown.click()
+            except:
+                pass
+            return False
+                
+        except Exception as e:
+            print(f"  言語選択エラー: {e}")
+            return False
+    
+    def get_wiki_sections(self):
+        """DeepWikiのセクション一覧を取得（サイト種別に応じて処理）"""
+        sections = []
+        
+        try:
+            if self.site_type == self.SITE_DEEPWIKI:
+                # deepwiki.com: <a>タグベースのナビゲーション
+                sections = self._get_sections_deepwiki()
+            else:
+                # app.devin.ai/wiki: <button>タグベースのナビゲーション
+                sections = self._get_sections_devin()
+            
+        except Exception as e:
+            print(f"  セクション取得エラー: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        return sections
+    
+    def _get_sections_deepwiki(self):
+        """deepwiki.com用のセクション取得（<a>タグベース）"""
+        sections = []
+        
+        # サイドバーの<a>要素を取得
+        sidebar_selectors = [
+            'ul[devin-scrollable="true"] li a',
+            'ul li a[href*="/"]',
+            '[class*="sidebar"] li a',
+            'aside li a',
+            'nav ul li a'
+        ]
+        
+        # サイドバーが完全に読み込まれるまで待機
+        links = []
+        best_selector = None
+        max_wait = 10
+        for wait_count in range(max_wait):
+            for selector in sidebar_selectors:
+                try:
+                    found = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    # deepwiki.comのリンクのみをフィルタ
+                    valid_links = [
+                        link for link in found 
+                        if link.get_attribute('href') and 
+                        ('deepwiki.com/' in link.get_attribute('href') or 
+                         link.get_attribute('href').startswith('/'))
+                    ]
+                    if len(valid_links) > len(links):
+                        links = valid_links
+                        best_selector = selector
+                except NoSuchElementException:
+                    continue
+            
+            if len(links) >= 3:
+                break
+            
+            time.sleep(1)
+        
+        if links and best_selector:
+            print(f"  サイドバーを検出: {best_selector} ({len(links)}項目)")
+        
+        if not links:
+            print("  警告: サイドバーのリンク要素が見つかりません")
+            return sections
+        
+        # 各リンクの情報を収集
+        for idx, link in enumerate(links):
+            try:
+                text = link.text.strip()
+                if not text:
+                    continue
+                
+                href = link.get_attribute('href') or ''
+                
+                # 階層レベルを判定（URLのパス構造から推測）
+                # 例: /owner/repo/1-overview -> level 0
+                # 例: /owner/repo/2.1-subsection -> level 1
+                level = 0
+                path_parts = href.split('/')
+                if path_parts:
+                    last_part = path_parts[-1]
+                    # 2.1-xxx, 3.2.1-xxx のようなパターンを検出
+                    dot_count = last_part.split('-')[0].count('.') if '-' in last_part else 0
+                    level = dot_count
+                
+                sections.append({
+                    'title': text,
+                    'index': idx,
+                    'level': level,
+                    'href': href
+                })
+                
+            except Exception as e:
+                print(f"  リンク情報取得エラー (index={idx}): {e}")
+                continue
+        
+        print(f"  取得したセクション数: {len(sections)}")
+        for s in sections[:5]:
+            indent = "  " * s['level']
+            print(f"    {indent}[L{s['level']}] {s['title']}")
+        if len(sections) > 5:
+            print(f"    ... 他 {len(sections) - 5} 件")
+        
+        return sections
+    
+    def _get_sections_devin(self):
+        """app.devin.ai/wiki用のセクション取得（<button>タグベース）"""
+        sections = []
+        
+        # サイドバーのbutton要素を取得
+        sidebar_selectors = [
+            'ul.flex-1 li button',
+            'ul.overflow-y-auto li button',
+            '[class*="sidebar"] li button',
+            'aside li button',
+            'nav li button'
+        ]
+        
+        # サイドバーが完全に読み込まれるまで待機
+        buttons = []
+        best_selector = None
+        max_wait = 10
+        for wait_count in range(max_wait):
+            for selector in sidebar_selectors:
+                try:
+                    found = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    if len(found) > len(buttons):
+                        buttons = found
+                        best_selector = selector
+                except NoSuchElementException:
+                    continue
+            
+            if len(buttons) >= 3:
+                break
+            
+            time.sleep(1)
+        
+        if buttons and best_selector:
+            print(f"  サイドバーを検出: {best_selector} ({len(buttons)}項目)")
+        
+        if not buttons:
+            print("  警告: サイドバーのbutton要素が見つかりません")
+            return sections
+        
+        # 各buttonのメタ情報を取得（padding-leftから階層を判定）
+        padding_values = set()
+        for btn in buttons:
+            try:
+                li_elem = btn.find_element(By.XPATH, '..')
+                style = li_elem.get_attribute('style') or ''
+                padding_match = re.search(r'padding-left:\s*(\d+)px', style)
+                if padding_match:
+                    padding_values.add(int(padding_match.group(1)))
+            except:
+                pass
+        
+        # padding値をソートしてレベルマッピングを作成
+        sorted_paddings = sorted(padding_values)
+        padding_to_level = {p: i for i, p in enumerate(sorted_paddings)}
+        
+        print(f"  検出された階層レベル: {len(sorted_paddings)}段階")
+        
+        # 各buttonの情報を収集
+        for idx, btn in enumerate(buttons):
+            try:
+                text = btn.text.strip()
+                if not text:
+                    continue
+                
+                # 親のli要素からpadding-leftを取得
+                li_elem = btn.find_element(By.XPATH, '..')
+                style = li_elem.get_attribute('style') or ''
+                padding_match = re.search(r'padding-left:\s*(\d+)px', style)
+                padding = int(padding_match.group(1)) if padding_match else 0
+                level = padding_to_level.get(padding, 0)
+                
+                sections.append({
+                    'title': text,
+                    'index': idx,
+                    'level': level,
+                    'padding': padding
+                })
+                
+            except Exception as e:
+                print(f"  button情報取得エラー (index={idx}): {e}")
+                continue
+        
+        print(f"  取得したセクション数: {len(sections)}")
+        for s in sections[:5]:
+            indent = "  " * s['level']
+            print(f"    {indent}[L{s['level']}] {s['title']}")
+        if len(sections) > 5:
+            print(f"    ... 他 {len(sections) - 5} 件")
+        
+        return sections
+    
+    def scroll_to_load_all_content(self):
+        """ページ全体をスクロールして遅延読み込みコンテンツを取得"""
+        print("  ページをスクロールしてコンテンツを読み込み中...")
+        
+        try:
+            # ページの高さを取得
+            last_height = self.driver.execute_script("return document.body.scrollHeight")
+            
+            while True:
+                # 下にスクロール
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1)
+                
+                # 新しい高さを取得
+                new_height = self.driver.execute_script("return document.body.scrollHeight")
+                
+                if new_height == last_height:
+                    break
+                last_height = new_height
+            
+            # 最上部に戻る
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"  スクロールエラー: {e}")
+    
+    def extract_page_html(self):
+        """現在のページのHTMLを取得"""
+        try:
+            # サイト種別に応じてセレクタを選択（wait_for_page_loadと統一）
+            if self.site_type == self.SITE_DEEPWIKI:
+                # deepwiki.com用: [class*="markdown"]は小さな要素にマッチする可能性があるため除外
+                content_selectors = ['article', 'main', '[class*="content"]']
+            else:
+                # app.devin.ai/wiki用
+                content_selectors = ['article', 'main', '[class*="content"]', '[class*="markdown"]']
+            
+            for selector in content_selectors:
+                try:
+                    elem = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if elem:
+                        html = elem.get_attribute('innerHTML')
+                        return html
+                except NoSuchElementException:
+                    continue
+            
+            # 見つからない場合はbody全体
+            html = self.driver.find_element(By.TAG_NAME, 'body').get_attribute('innerHTML')
+            return html
+            
+        except Exception as e:
+            print(f"  HTML取得エラー: {e}")
+            return ""
+    
+    def convert_html_to_markdown(self, html_content, page_name):
+        """HTMLをMarkdownに変換"""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # ナビゲーション要素を除去
+        for nav in soup.find_all(['nav', 'header', 'footer']):
+            nav.decompose()
+        
+        # 特定のクラスを持つ要素を除去（UI要素など）
+        # deepwiki.comでは本文が影響を受ける可能性があるため、より慎重に処理
+        if self.site_type != self.SITE_DEEPWIKI:
+            for elem in soup.find_all(class_=re.compile(r'sidebar|navigation|menu|breadcrumb')):
+                elem.decompose()
+        
+        
+        md_parts = []
+        self.svg_counter = 0
+        
+        for elem in soup.children:
+            result = self._convert_element(elem, page_name)
+            if result:
+                md_parts.append(result)
+        
+        md_content = ''.join(md_parts)
+        
+        # 後処理
+        md_content = md_content.replace('Link copied!', '')
+        md_content = re.sub(r'\n{3,}', '\n\n', md_content)
+        
+        # deepwiki.com専用: 不要な行を除去（行単位で安全に処理）
+        if self.site_type == self.SITE_DEEPWIKI:
+            # Menu# を Menu\n# に分割（改行なしで連結されている場合の対策）
+            md_content = md_content.replace('Menu# ', 'Menu\n# ')
+            
+            lines = md_content.split('\n')
+            cleaned = []
+            for i, line in enumerate(lines):
+                # 先頭50行以内の不要な行をスキップ
+                if i < 50:
+                    if 'Index your code' in line:
+                        continue
+                    if 'Last indexed' in line:
+                        continue
+                    if line.strip() == 'Menu':
+                        continue
+                cleaned.append(line)
+            md_content = '\n'.join(cleaned)
+            
+            # ページ先頭の目次リスト（サイドバーからの重複）を削除
+            # 最初のh1より前にあるリストブロック（- で始まる行が連続）を削除
+            lines = md_content.split('\n')
+            
+            if lines:
+                # 最初のh1を探す
+                first_h1_idx = -1
+                for i, line in enumerate(lines):
+                    if line.strip().startswith('# ') and not line.strip().startswith('## '):
+                        first_h1_idx = i
+                        break
+                
+                if first_h1_idx > 0:
+                    # h1より前の範囲を調べる
+                    pre_lines = lines[:first_h1_idx]
+                    
+                    # `- `で始まる行が連続しているブロックを探す
+                    nav_start = None
+                    nav_end = None
+                    for i, line in enumerate(pre_lines):
+                        if line.strip().startswith('- '):
+                            if nav_start is None:
+                                nav_start = i
+                            nav_end = i
+                        else:
+                            # ブロックが始まった後で`- `でない行が来たら終了
+                            if nav_start is not None and nav_end is not None:
+                                # 空行は許容する
+                                if line.strip() == '':
+                                    continue
+                                break
+                    
+                    if nav_start is not None and nav_end is not None:
+                        nav_len = nav_end - nav_start + 1
+                        # 5行以上の`- `が連続していればナビとみなす
+                        if nav_len >= 5:
+                            # そのブロックだけ削除
+                            lines = lines[:nav_start] + lines[nav_end + 1:]
+                            md_content = '\n'.join(lines)
+        
+        # app.devin.ai専用: ページ先頭の目次リスト（サイドバーからの重複）を削除
+        # deepwiki.comでは本文を消す可能性があるため、このロジックは適用しない
+        if self.site_type == self.SITE_DEVIN:
+            lines = md_content.split('\n')
+            if lines:
+                first_h1_idx = -1
+                first_h1_text = ''
+                for i, line in enumerate(lines):
+                    if line.startswith('# ') and not line.startswith('## '):
+                        first_h1_idx = i
+                        first_h1_text = line
+                        break
+                
+                if first_h1_idx >= 0 and first_h1_text:
+                    # 同じh1が後にあるか探す（重複目次の削除）
+                    second_h1_idx = -1
+                    for i in range(first_h1_idx + 1, len(lines)):
+                        if lines[i] == first_h1_text:
+                            second_h1_idx = i
+                            break
+                    
+                    if second_h1_idx > first_h1_idx:
+                        between_lines = lines[first_h1_idx + 1:second_h1_idx]
+                        list_lines = [l for l in between_lines if l.strip().startswith('- ')]
+                        if len(list_lines) > 5:
+                            lines = lines[:first_h1_idx] + lines[second_h1_idx:]
+                            md_content = '\n'.join(lines)
+        
+        return md_content.strip()
+    
+    def _convert_element(self, elem, page_name, depth=0):
+        """HTML要素をMarkdownに変換"""
+        if elem.name is None:
+            text = elem.string or ''
+            return text.strip()
+        
+        tag = elem.name.lower()
+        
+        # スキップすべき要素
+        skip_tags = ['style', 'script', 'nav', 'header', 'footer', 'button', 
+                     'input', 'textarea', 'form', 'iframe', 'noscript']
+        if tag in skip_tags:
+            return ''
+        
+        # 見出し
+        if tag == 'h1':
+            return f"# {elem.get_text(strip=True)}\n\n"
+        elif tag == 'h2':
+            return f"## {elem.get_text(strip=True)}\n\n"
+        elif tag == 'h3':
+            return f"### {elem.get_text(strip=True)}\n\n"
+        elif tag == 'h4':
+            return f"#### {elem.get_text(strip=True)}\n\n"
+        
+        # 段落
+        elif tag == 'p':
+            text = self._process_inline(elem)
+            if text.strip():
+                return f"{text}\n\n"
+            return ''
+        
+        # コードブロック
+        elif tag == 'pre':
+            svg = elem.find('svg')
+            if svg:
+                return self._convert_svg(svg, page_name)
+            
+            code = elem.find('code')
+            if code:
+                lang = code.get('data-lang', '') or code.get('class', '')
+                if 'language-' in str(lang):
+                    lang_match = re.search(r'language-(\w+)', str(lang))
+                    lang = lang_match.group(1) if lang_match else ''
+                
+                # <br>タグを改行に変換（行区切りとして使われている場合）
+                for br in code.find_all('br'):
+                    br.replace_with('\n')
+                
+                # spanなどのインライン要素はそのまま連結（separatorは空）
+                text = code.get_text(separator='', strip=False)
+                # 改行コードをLFに正規化
+                text = text.replace("\r\n", "\n").replace("\r", "\n")
+                
+                if text.strip():
+                    return f"```{lang}\n{text}\n```\n\n"
+            return ''
+        
+        # インラインコード
+        elif tag == 'code':
+            return f"`{elem.get_text()}`"
+        
+        # 強調
+        elif tag in ['strong', 'b']:
+            return f"**{self._process_inline(elem)}**"
+        elif tag in ['em', 'i']:
+            return f"*{self._process_inline(elem)}*"
+        
+        # リンク
+        elif tag == 'a':
+            text = self._process_inline(elem)
+            href = elem.get('href', '')
+            if href and text:
+                return f"[{text}]({href})"
+            return text
+        
+        # リスト
+        elif tag == 'ul':
+            items = []
+            for li in elem.find_all('li', recursive=False):
+                item_text = self._process_inline(li).strip()
+                items.append(f"- {item_text}")
+            return '\n'.join(items) + '\n\n'
+        
+        elif tag == 'ol':
+            items = []
+            for i, li in enumerate(elem.find_all('li', recursive=False), 1):
+                item_text = self._process_inline(li).strip()
+                items.append(f"{i}. {item_text}")
+            return '\n'.join(items) + '\n\n'
+        
+        # テーブル
+        elif tag == 'table':
+            return self._convert_table(elem)
+        
+        # SVG
+        elif tag == 'svg':
+            return self._convert_svg(elem, page_name)
+        
+        # details/summary（折りたたみ要素）
+        elif tag == 'details':
+            summary_elem = elem.find('summary')
+            summary_text = summary_elem.get_text(strip=True) if summary_elem else 'Details'
+            
+            body_parts = []
+            for child in elem.children:
+                if child.name == 'summary':
+                    continue
+                child_result = self._convert_element(child, page_name, depth + 1)
+                if child_result:
+                    body_parts.append(child_result)
+            
+            body_md = ''.join(body_parts).strip()
+            return f"<details>\n<summary>{summary_text}</summary>\n\n{body_md}\n\n</details>\n\n"
+        
+        elif tag == 'summary':
+            return ''
+        
+        # コンテナ要素
+        elif tag in ['div', 'span', 'section', 'article', 'main']:
+            result = []
+            for child in elem.children:
+                child_result = self._convert_element(child, page_name, depth + 1)
+                if child_result:
+                    result.append(child_result)
+            return ''.join(result)
+        
+        # その他
+        else:
+            text = self._process_inline(elem)
+            if text.strip():
+                return text
+            return ''
+    
+    def _process_inline(self, elem):
+        """インライン要素を処理"""
+        if elem.string:
+            return elem.string
+        
+        parts = []
+        for child in elem.children:
+            if child.name is None:
+                parts.append(child.string or '')
+            elif child.name == 'code':
+                parts.append(f"`{child.get_text()}`")
+            elif child.name in ['strong', 'b']:
+                parts.append(f"**{self._process_inline(child)}**")
+            elif child.name in ['em', 'i']:
+                parts.append(f"*{self._process_inline(child)}*")
+            elif child.name == 'a':
+                text = self._process_inline(child)
+                href = child.get('href', '')
+                if href:
+                    parts.append(f"[{text}]({href})")
+                else:
+                    parts.append(text)
+            elif child.name == 'br':
+                parts.append('\n')
+            else:
+                parts.append(self._process_inline(child))
+        
+        return ''.join(parts)
+    
+    def _convert_table(self, table_elem):
+        """テーブルをMarkdownに変換"""
+        rows = []
+        
+        # ヘッダー行
+        thead = table_elem.find('thead')
+        if thead:
+            header_row = thead.find('tr')
+            if header_row:
+                cells = [self._process_inline(th).strip() for th in header_row.find_all(['th', 'td'])]
+                if cells:
+                    rows.append('| ' + ' | '.join(cells) + ' |')
+                    rows.append('| ' + ' | '.join(['---'] * len(cells)) + ' |')
+        
+        # ボディ行
+        tbody = table_elem.find('tbody') or table_elem
+        for tr in tbody.find_all('tr'):
+            if tr.parent.name == 'thead':
+                continue
+            cells = [self._process_inline(td).strip() for td in tr.find_all(['td', 'th'])]
+            if cells:
+                rows.append('| ' + ' | '.join(cells) + ' |')
+        
+        if rows:
+            return '\n'.join(rows) + '\n\n'
+        return ''
+    
+    def _convert_svg(self, svg_elem, page_name):
+        """SVGをファイルに保存し、指定された形式で出力"""
+        svg_str = str(svg_elem)
+        
+        # 小さいアイコンSVGはスキップ
+        svg_width = svg_elem.get('width', '')
+        svg_height = svg_elem.get('height', '')
+        try:
+            w_val = float(re.sub(r'[^\d.]', '', svg_width)) if svg_width else 0
+            h_val = float(re.sub(r'[^\d.]', '', svg_height)) if svg_height else 0
+            if w_val > 0 and h_val > 0 and w_val < 100 and h_val < 100:
+                return ''
+        except:
+            pass
+        
+        # Mermaid図かどうかをチェック
+        svg_id = svg_elem.get('id', '')
+        svg_classes = svg_elem.get('class', [])
+        if isinstance(svg_classes, str):
+            svg_classes = svg_classes.split()
+        
+        is_mermaid = svg_id.startswith('mermaid-') or any('mermaid' in cls.lower() for cls in svg_classes)
+        has_diagram_content = bool(svg_elem.find(class_=re.compile(r'node|edge|actor|cluster|statediagram')))
+        
+        if not is_mermaid and not has_diagram_content:
+            viewbox = svg_elem.get('viewBox', '')
+            if viewbox:
+                parts = viewbox.split()
+                if len(parts) == 4:
+                    try:
+                        vw, vh = float(parts[2]), float(parts[3])
+                        if vw < 100 and vh < 100:
+                            return ''
+                    except:
+                        pass
+        
+        # 空のSVGはスキップ
+        svg_str_clean = re.sub(r'<style[^>]*>.*?</style>', '', svg_str, flags=re.DOTALL)
+        if not re.search(r'<(path|rect|polygon|circle|line|text)\b', svg_str_clean):
+            return ''
+        
+        self.svg_counter += 1
+        base_filename = f"{page_name}_{self.svg_counter:02d}"
+        svg_str_export = fix_svg_camelcase(svg_str)
+        
+        # 各形式のコンテンツを生成
+        outputs = {}
+        
+        # SVG出力
+        if 'svg' in self.diagram_types:
+            svg_filename = f"{base_filename}.svg"
+            svg_path = os.path.join(self.output_dir, 'images', svg_filename)
+            try:
+                with open(svg_path, 'w', encoding='utf-8') as f:
+                    f.write(svg_str_export)
+                outputs['svg'] = f"![図](images/{svg_filename})"
+            except Exception as e:
+                print(f"  SVG保存エラー: {e}")
+        
+        # PNG出力（SVGを保存してから後でブラウザで変換）
+        if 'png' in self.diagram_types:
+            png_filename = f"{base_filename}.png"
+            png_path = os.path.join(self.output_dir, 'images', png_filename)
+            # PNG変換にはSVGファイルが必要なので、SVGも保存
+            svg_for_png_path = os.path.join(self.output_dir, 'images', f"{base_filename}.svg")
+            if not os.path.exists(svg_for_png_path):
+                try:
+                    with open(svg_for_png_path, 'w', encoding='utf-8') as f:
+                        f.write(svg_str_export)
+                except Exception as e:
+                    print(f"  SVG保存エラー（PNG用）: {e}")
+            # PNG変換をキューに追加（後で一括処理）
+            self.pending_png_conversions.append((svg_for_png_path, png_path))
+            outputs['png'] = f"![図](images/{png_filename})"
+        
+        # Mermaid出力
+        if 'mermaid' in self.diagram_types:
+            if HAS_MERMAID_CONVERTER:
+                try:
+                    mermaid_code = extract_mermaid_from_svg(svg_str_clean)
+                    if mermaid_code and len(mermaid_code) > 20:
+                        outputs['mermaid'] = f"```mermaid\n{mermaid_code}\n```"
+                except Exception as e:
+                    print(f"  Mermaid変換エラー: {e}")
+        
+        if not outputs:
+            return ''
+        
+        # 出力形式に応じてMarkdownを生成
+        result_parts = []
+        is_first = True
+        
+        for dtype in self.diagram_types:
+            if dtype not in outputs:
+                continue
+            
+            content = outputs[dtype]
+            
+            if is_first:
+                # 最初の形式は直接表示
+                result_parts.append(content + "\n\n")
+                is_first = False
+            else:
+                # 2番目以降はdetailsで折りたたみ
+                label = {'svg': 'SVG図', 'png': 'PNG図', 'mermaid': 'Mermaid記法'}
+                summary = label.get(dtype, dtype)
+                result_parts.append(f"<details>\n<summary>{summary}を表示</summary>\n\n{content}\n\n</details>\n\n")
+        
+        return ''.join(result_parts)
+    
+    def export_section_by_click(self, section, chapter_number, total):
+        """1セクションをクリックしてエクスポート"""
+        title = section['title']
+        elem_index = section['index']
+        level = section['level']
+        
+        print(f"\n[{chapter_number}] エクスポート中: {title} (レベル{level})")
+        
+        try:
+            if self.site_type == self.SITE_DEEPWIKI:
+                # deepwiki.com: リンクをクリックしてナビゲーション
+                self._navigate_deepwiki(section)
+            else:
+                # app.devin.ai/wiki: ボタンをクリック
+                self._navigate_devin(elem_index)
+            
+            # ページ読み込み待機
+            self.wait_for_page_load()
+            
+        except Exception as e:
+            print(f"  ナビゲーションエラー: {e}")
+            return None
+        
+        # HTMLを取得
+        html_content = self.extract_page_html()
+        
+        # ファイル名を生成（章番号形式）
+        safe_title = self.sanitize_filename(title)
+        page_name = f"{chapter_number}_{safe_title}"
+        
+        # Markdownに変換
+        self.svg_counter = 0  # SVGカウンタをリセット
+        md_content = self.convert_html_to_markdown(html_content, page_name)
+        
+        # タイトルを追加（なければ）
+        if not md_content.startswith('#'):
+            md_content = f"# {title}\n\n{md_content}"
+        
+        # 保存
+        md_path = os.path.join(self.output_dir, f"{page_name}.md")
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+        
+        print(f"  保存完了: {md_path}")
+        
+        return {
+            'chapter_number': chapter_number,
+            'title': title,
+            'level': level,
+            'filename': f"{page_name}.md",
+            'page_name': page_name,
+            'href': section.get('href', '')
+        }
+    
+    def _navigate_deepwiki(self, section):
+        """deepwiki.com用のナビゲーション（リンククリック優先、SPAルーティング活用）"""
+        elem_index = section['index']
+        href = section.get('href', '')
+        
+        # サイドバーのリンクをクリック（SPAルーティングを活用して高速化）
+        sidebar_selectors = [
+            'ul[devin-scrollable="true"] li a',
+            'ul li a[href*="/"]',
+            '[class*="sidebar"] li a',
+            'aside li a',
+            'nav ul li a'
+        ]
+        
+        links = []
+        for selector in sidebar_selectors:
+            try:
+                found = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                valid_links = [
+                    link for link in found 
+                    if link.get_attribute('href') and 
+                    ('deepwiki.com/' in link.get_attribute('href') or 
+                     link.get_attribute('href').startswith('/'))
+                ]
+                if valid_links:
+                    links = valid_links
+                    break
+            except:
+                continue
+        
+        # リンククリックを試行（SPAルーティング）
+        if elem_index < len(links):
+            link = links[elem_index]
+            try:
+                WebDriverWait(self.driver, 2).until(EC.element_to_be_clickable(link))
+                link.click()
+                return
+            except Exception as e:
+                print(f"  リンククリック失敗、URLナビゲーションにフォールバック: {e}")
+        
+        # フォールバック: 直接URLに移動
+        if href:
+            if not href.startswith('http'):
+                href = f"https://deepwiki.com{href}"
+            self.driver.get(href)
+        else:
+            raise Exception(f"リンク index {elem_index} が範囲外で、hrefも取得できません")
+    
+    def _navigate_devin(self, btn_index):
+        """app.devin.ai/wiki用のナビゲーション（ボタンクリック）"""
+        sidebar_selectors = [
+            'ul.flex-1 li button',
+            'ul.overflow-y-auto li button',
+            '[class*="sidebar"] li button',
+            'aside li button',
+            'nav li button'
+        ]
+        
+        buttons = []
+        for selector in sidebar_selectors:
+            try:
+                buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if buttons:
+                    break
+            except:
+                continue
+        
+        if btn_index >= len(buttons):
+            raise Exception(f"button index {btn_index} が範囲外です")
+        
+        btn = buttons[btn_index]
+        try:
+            WebDriverWait(self.driver, 3).until(EC.element_to_be_clickable(btn))
+            btn.click()
+        except Exception as click_err:
+            print(f"  クリック待機エラー、直接クリックを試行: {click_err}")
+            btn.click()
+    
+    def generate_chapter_numbers(self, sections):
+        """セクションリストから階層的な章番号を生成"""
+        chapter_numbers = []
+        counters = [0, 0, 0, 0]  # 最大4階層まで対応
+        
+        for section in sections:
+            level = section['level']
+            
+            # 現在のレベルのカウンタを増加
+            counters[level] += 1
+            
+            # 下位レベルのカウンタをリセット
+            for i in range(level + 1, len(counters)):
+                counters[i] = 0
+            
+            # 章番号を生成（例: 01, 02, 02_01, 02_01_01）
+            parts = []
+            for i in range(level + 1):
+                parts.append(f"{counters[i]:02d}")
+            
+            chapter_number = '_'.join(parts)
+            chapter_numbers.append(chapter_number)
+        
+        return chapter_numbers
+    
+    def export_all(self, base_url):
+        """全セクションをエクスポート"""
+        print("\n" + "="*60)
+        print("DeepWikiエクスポートを開始します")
+        print("="*60)
+        
+        # ベースURLを保存（内部リンク変換で使用）
+        self.base_url = base_url
+        
+        # ベースURLに移動
+        self.driver.get(base_url)
+        self.wait_for_page_load()
+        
+        # セクション一覧を取得
+        sections = self.get_wiki_sections()
+        
+        if not sections:
+            print("\nセクションが見つかりません。現在のページのみエクスポートします。")
+            self.scroll_to_load_all_content()
+            html_content = self.extract_page_html()
+            md_content = self.convert_html_to_markdown(html_content, 'main')
+            
+            md_path = os.path.join(self.output_dir, 'main.md')
+            with open(md_path, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+            
+            print(f"保存完了: {md_path}")
+            return
+        
+        print(f"\n検出されたセクション数: {len(sections)}")
+        
+        # 階層的な章番号を生成
+        chapter_numbers = self.generate_chapter_numbers(sections)
+        
+        # 各セクションをエクスポート
+        exported = []
+        for i, (section, chapter_num) in enumerate(zip(sections, chapter_numbers)):
+            result = self.export_section_by_click(section, chapter_num, len(sections))
+            if result:
+                exported.append(result)
+            # レート制限対策は不要（DeepWikiはローカルクリックなので制限なし）
+        
+        # DeepWiki内リンクをMarkdownファイルリンクに変換
+        self.convert_internal_links(exported)
+        
+        # 目次を生成
+        self.generate_table_of_contents(exported)
+        
+        # PNG変換が必要な場合は一括処理
+        if 'png' in self.diagram_types:
+            self.process_pending_png_conversions()
+        
+        print("\n" + "="*60)
+        print("エクスポート完了!")
+        print(f"出力ディレクトリ: {self.output_dir}")
+        print(f"エクスポートされたファイル数: {len(exported)}")
+        print("="*60)
+    
+    def convert_internal_links(self, exported):
+        """DeepWiki内リンクをMarkdownファイルリンクに変換"""
+        if not exported:
+            return
+        
+        print("\n内部リンクを変換中...")
+        
+        # セクション番号→ファイル名のマッピングを作成
+        link_map = {}
+        for idx, item in enumerate(exported, start=1):
+            link_map[str(idx)] = item['filename']
+            
+            chapter_num = item.get('chapter_number', '')
+            if '_' in chapter_num:
+                parts = chapter_num.split('_')
+                dotted = '.'.join(str(int(p)) for p in parts)
+                link_map[dotted] = item['filename']
+        
+        # deepwiki.com用: URL パス→ファイル名のマッピングを作成
+        path_map = {}
+        base_path = ''
+        if self.site_type == self.SITE_DEEPWIKI and hasattr(self, 'base_url'):
+            from urllib.parse import urlparse
+            parsed = urlparse(self.base_url)
+            path_parts = parsed.path.strip('/').split('/')
+            if len(path_parts) >= 2:
+                base_path = '/' + '/'.join(path_parts[:2])
+            
+            for item in exported:
+                href = item.get('href', '')
+                if not href:
+                    continue
+                
+                if href.startswith('http'):
+                    p = urlparse(href)
+                    path = p.path
+                else:
+                    path = href
+                
+                path = path.rstrip('/')
+                path_map[path] = item['filename']
+        
+        # 各Markdownファイルのリンクを変換
+        converted_count = 0
+        for item in exported:
+            md_path = os.path.join(self.output_dir, item['filename'])
+            if not os.path.exists(md_path):
+                continue
+            
+            with open(md_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            original = content
+            
+            # 1. 番号リンク変換: [テキスト](#番号)
+            def replace_num_link(match):
+                text = match.group(1)
+                section_num = match.group(2)
+                if section_num in link_map:
+                    return f'[{text}](./{link_map[section_num]})'
+                return match.group(0)
+            
+            pattern_num = r'\[([^\]]+)\]\(#(\d+(?:\.\d+)*)\)'
+            content = re.sub(pattern_num, replace_num_link, content)
+            
+            # 2. deepwiki.com用: パスリンク変換
+            if self.site_type == self.SITE_DEEPWIKI and path_map:
+                def replace_path_link(match):
+                    text = match.group(1)
+                    href = match.group(2)
+                    
+                    from urllib.parse import urlparse
+                    if href.startswith('http'):
+                        p = urlparse(href)
+                        path = p.path
+                    else:
+                        path = href
+                    
+                    path = path.rstrip('/')
+                    
+                    if path in path_map:
+                        return f'[{text}](./{path_map[path]})'
+                    return match.group(0)
+                
+                # deepwiki.comのリンクパターン
+                pattern_path = r'\[([^\]]+)\]\((https?://deepwiki\.com/[^\)]+|/[^\)]+)\)'
+                content = re.sub(pattern_path, replace_path_link, content)
+            
+            if content != original:
+                with open(md_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                converted_count += 1
+        
+        if converted_count > 0:
+            print(f"  {converted_count}ファイルのリンクを変換しました")
+        else:
+            print("  変換対象のリンクはありませんでした")
+    
+    def generate_table_of_contents(self, exported):
+        """目次ファイルを生成（階層構造対応）"""
+        toc_lines = ["# 目次\n\n"]
+        
+        for item in exported:
+            # 階層レベルに応じてインデントを追加
+            level = item.get('level', 0)
+            indent = "  " * level
+            chapter_num = item.get('chapter_number', '')
+            toc_lines.append(f"{indent}- [{chapter_num} {item['title']}]({item['filename']})\n")
+        
+        toc_path = os.path.join(self.output_dir, '00_table_of_contents.md')
+        with open(toc_path, 'w', encoding='utf-8') as f:
+            f.writelines(toc_lines)
+        
+        print(f"\n目次を生成: {toc_path}")
+    
+    def sanitize_filename(self, name):
+        """ファイル名として安全な文字列に変換"""
+        # 特殊文字を除去
+        safe = re.sub(r'[\\/:*?"<>|]', '', name)
+        safe = safe.replace(' ', '_')
+        # 日本語は保持
+        return safe[:50]
+    
+    def setup_png_browser(self):
+        """PNG変換用のheadlessブラウザを起動"""
+        if self.png_driver is not None:
+            return  # 既に起動済み
+        
+        print("\nPNG変換用ブラウザを起動中...")
+        options = Options()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        # SVGが大きい場合に備えて十分なウィンドウサイズを設定
+        options.add_argument('--window-size=2560,1440')
+        
+        if HAS_WEBDRIVER_MANAGER:
+            try:
+                service = Service(ChromeDriverManager().install())
+                self.png_driver = webdriver.Chrome(service=service, options=options)
+            except Exception as e:
+                print(f"  webdriver-managerでのChromeDriver取得に失敗: {e}")
+                self.png_driver = webdriver.Chrome(options=options)
+        else:
+            self.png_driver = webdriver.Chrome(options=options)
+        
+        # 背景を透過に設定（CDPコマンド）
+        try:
+            self.png_driver.execute_cdp_cmd(
+                "Emulation.setDefaultBackgroundColorOverride",
+                {"color": {"r": 0, "g": 0, "b": 0, "a": 0}}
+            )
+        except Exception as e:
+            print(f"  背景透過設定に失敗: {e}")
+    
+    def _fix_svg_dimensions(self, svg_content):
+        """SVGのwidth/heightがない場合、viewBoxから補完する"""
+        # root <svg ...> タグを探す
+        svg_match = re.search(r'<svg\b([^>]*)>', svg_content, re.IGNORECASE)
+        if not svg_match:
+            return svg_content
+        
+        attrs = svg_match.group(1)
+        
+        # viewBoxを取得
+        viewbox_match = re.search(r'\bviewBox\s*=\s*"([^"]+)"', attrs, re.IGNORECASE)
+        if not viewbox_match:
+            return svg_content
+        
+        # viewBoxからサイズを計算
+        parts = viewbox_match.group(1).split()
+        if len(parts) != 4:
+            return svg_content
+        
+        try:
+            vw = float(parts[2])
+            vh = float(parts[3])
+            if vw <= 0 or vh <= 0:
+                return svg_content
+        except ValueError:
+            return svg_content
+        
+        # width/heightの現在値を確認
+        width_match = re.search(r'\bwidth\s*=\s*"([^"]+)"', attrs)
+        height_match = re.search(r'\bheight\s*=\s*"([^"]+)"', attrs)
+        
+        # 修正が必要かチェック（無い、0、%の場合）
+        need_width_fix = False
+        need_height_fix = False
+        
+        if not width_match:
+            need_width_fix = True
+        else:
+            w_val = width_match.group(1)
+            if w_val == '0' or w_val.endswith('%'):
+                need_width_fix = True
+        
+        if not height_match:
+            need_height_fix = True
+        else:
+            h_val = height_match.group(1)
+            if h_val == '0' or h_val.endswith('%'):
+                need_height_fix = True
+        
+        if not need_width_fix and not need_height_fix:
+            return svg_content
+        
+        # 属性を修正
+        new_attrs = attrs
+        if need_width_fix:
+            if width_match:
+                new_attrs = re.sub(r'\bwidth\s*=\s*"[^"]+"', f'width="{vw}"', new_attrs)
+            else:
+                new_attrs = new_attrs.rstrip() + f' width="{vw}"'
+        
+        if need_height_fix:
+            if height_match:
+                new_attrs = re.sub(r'\bheight\s*=\s*"[^"]+"', f'height="{vh}"', new_attrs)
+            else:
+                new_attrs = new_attrs.rstrip() + f' height="{vh}"'
+        
+        # SVGを再構築
+        svg_content = (
+            svg_content[:svg_match.start(1)] +
+            new_attrs +
+            svg_content[svg_match.end(1):]
+        )
+        return svg_content
+    
+    def convert_svg_to_png(self, svg_path, png_path):
+        """SVGファイルをブラウザでレンダリングしてPNGに変換"""
+        try:
+            # SVGファイルを読み込み
+            svg_content = Path(svg_path).read_text(encoding='utf-8')
+            
+            # SVGのwidth/heightを補完（viewBoxから）
+            svg_content = self._fix_svg_dimensions(svg_content)
+            
+            # SVGをラップするHTMLを作成（背景透過、余白なし）
+            wrapper_html = f'''<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;display:inline-block;background:transparent;">
+{svg_content}
+</body>
+</html>'''
+            
+            # 一時HTMLファイルに書き出し
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.html', delete=False, encoding='utf-8'
+            ) as tmp_file:
+                tmp_file.write(wrapper_html)
+                tmp_html_path = tmp_file.name
+            
+            try:
+                # file://でHTMLを開く
+                file_uri = Path(tmp_html_path).as_uri()
+                self.png_driver.get(file_uri)
+                
+                # SVG要素を取得
+                svg_elem = self.png_driver.find_element(By.TAG_NAME, 'svg')
+                
+                # 要素をビューポート内にスクロール
+                self.png_driver.execute_script(
+                    "arguments[0].scrollIntoView(true);", svg_elem
+                )
+                time.sleep(0.2)  # レンダリング完了を待機
+                
+                # SVG要素のみをスクリーンショット
+                svg_elem.screenshot(png_path)
+                return True
+                
+            finally:
+                # 一時ファイルを削除
+                try:
+                    os.unlink(tmp_html_path)
+                except:
+                    pass
+                    
+        except Exception as e:
+            print(f"  PNG変換エラー ({os.path.basename(svg_path)}): {e}")
+            return False
+    
+    def process_pending_png_conversions(self):
+        """保留中のPNG変換を一括処理"""
+        if not self.pending_png_conversions:
+            return
+        
+        print(f"\n{len(self.pending_png_conversions)}個のSVGをPNGに変換中...")
+        
+        # PNG変換用ブラウザを起動
+        self.setup_png_browser()
+        
+        success_count = 0
+        for svg_path, png_path in self.pending_png_conversions:
+            if self.convert_svg_to_png(svg_path, png_path):
+                success_count += 1
+        
+        print(f"  PNG変換完了: {success_count}/{len(self.pending_png_conversions)}")
+        self.pending_png_conversions = []
+    
+    def close(self):
+        """ブラウザを閉じる"""
+        if self.png_driver:
+            self.png_driver.quit()
+        if self.driver:
+            self.driver.quit()
+
+
+def print_usage():
+    """使用方法を表示"""
+    print("""
+DeepWikiエクスポートツール
+
+使用方法:
+    python deepwiki2md.py <DeepWiki URL> [オプション]
+
+対応サイト:
+    - https://deepwiki.com/owner/repo （パブリック、ログイン不要）
+    - https://app.devin.ai/wiki/owner/repo （要ログイン）
+
+オプション:
+    --output, -o        出力ディレクトリ（デフォルト: output
+    --lang, -l          言語選択（デフォルト: japanese）
+                        ※ deepwiki.comでは言語選択は無効です
+                        例: japanese, english, chinese, korean, etc.
+    --diagram_type, -d  図の出力形式（デフォルト: mermaid,svg）
+                        png: PNG画像のみ出力
+                        svg: SVG画像のみ出力
+                        mermaid: Mermaid記法のみ出力
+                        複数指定可（カンマ区切り）: png,mermaid,svg
+                        先頭の形式が直接表示、それ以外はdetailsで折りたたみ
+
+例:
+    # deepwiki.com（パブリック）
+    python deepwiki2md.py https://deepwiki.com/microsoft/vscode
+    python deepwiki2md.py https://deepwiki.com/owner/repo -o ./output
+    
+    # app.devin.ai/wiki（要ログイン）
+    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo
+    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --lang english
+    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -o ./output -l japanese
+    python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -d png,mermaid,svg
+
+必要なパッケージ:
+    pip install selenium beautifulsoup4 webdriver-manager
+
+注意:
+    - Chrome/Chromiumブラウザが必要です
+    - app.devin.ai/wikiは初回実行時にログインが必要です（セッションは保持されます）
+    - deepwiki.comはログイン不要です
+    - PNG出力はブラウザでSVGをレンダリングして生成します
+""")
+
+
+def main():
+    """メイン関数"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='DeepWikiエクスポートツール',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument('url', help='DeepWiki URL (例: https://deepwiki.com/owner/repo または https://app.devin.ai/wiki/owner/repo)')
+    parser.add_argument('-o', '--output', default='output', help='出力ディレクトリ（デフォルト: output')
+    parser.add_argument('-l', '--lang', default='japanese', help='言語選択（デフォルト: japanese）※deepwiki.comでは無効')
+    parser.add_argument('-d', '--diagram_type', default='mermaid,svg', 
+                        help='図の出力形式（デフォルト: mermaid,svg）。png/svg/mermaidをカンマ区切りで指定')
+    
+    args = parser.parse_args()
+    
+    # URLの検証
+    if not args.url.startswith('http'):
+        print("エラー: 有効なURLを指定してください")
+        print_usage()
+        sys.exit(1)
+    
+    exporter = DeepWikiExporter(args.output, diagram_types=args.diagram_type)
+    
+    # サイト種別を検出
+    exporter.detect_site_type(args.url)
+    
+    try:
+        # ブラウザを起動
+        print("ブラウザを起動中...")
+        exporter.setup_browser(headless=False)
+        
+        # ログインを待つ（deepwiki.comの場合はスキップ）
+        exporter.navigate_and_wait_for_login(args.url)
+        
+        # 言語を選択（deepwiki.comの場合はスキップ）
+        if args.lang and exporter.site_type == DeepWikiExporter.SITE_DEVIN:
+            exporter.select_language(args.lang)
+        elif exporter.site_type == DeepWikiExporter.SITE_DEEPWIKI:
+            print("deepwiki.com: 言語選択はスキップします")
+        
+        # 全セクションをエクスポート
+        exporter.export_all(args.url)
+        
+    except KeyboardInterrupt:
+        print("\n\n中断されました。")
+    except Exception as e:
+        print(f"\nエラー: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        exporter.close()
+
+
+if __name__ == '__main__':
+    main()

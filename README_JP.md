@@ -1,0 +1,213 @@
+# DeepWikiエクスポートツール
+
+DeepWikiからドキュメントを取得し、Markdown形式に変換するツールです。
+
+## 対応サイト
+
+- **app.devin.ai/wiki** - Devin Wiki（ログイン必要、言語選択可能）
+- **deepwiki.com** - DeepWiki（ログイン不要、言語選択なし）
+
+## 機能
+
+- Seleniumによる自動コンテンツ取得
+- 2つのサイト形式を自動検出
+- HTML→Markdown変換（表、コードブロック、リスト対応）
+- SVG図の保存とMermaid記法への変換
+  - フローチャート
+  - シーケンス図
+  - 状態遷移図
+  - クラス図
+- PNG画像出力（ブラウザでSVGをレンダリングして生成）
+- 目次ファイルの自動生成
+- 内部リンクの相対パス変換
+- `<details>`タグ（折りたたみ）対応
+- セッション保持（app.devin.ai/wikiのみ、2回目以降はログイン不要）
+
+## 対応プラットフォーム
+
+- Windows
+- macOS
+- Linux
+
+## 必要条件
+
+- Python 3.8以上
+- Chrome/Chromiumブラウザ
+- uv（推奨）またはpip
+
+## インストール（uv使用 - 推奨）
+
+### 1. uvのインストール
+
+uvがインストールされていない場合は、以下のコマンドでインストールしてください。
+
+**Windows (PowerShell)**:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**macOS / Linux**:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 2. 仮想環境の作成と依存パッケージのインストール
+
+```bash
+# プロジェクトディレクトリに移動
+cd deepwiki2md
+
+# 仮想環境を作成して依存パッケージをインストール
+uv sync
+```
+
+### 3. 実行
+
+```bash
+# uvで実行
+uv run python deepwiki2md.py <DeepWiki URL>
+
+# または仮想環境を有効化してから実行
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
+python deepwiki2md.py <DeepWiki URL>
+```
+
+## インストール（pip使用）
+
+```bash
+# 仮想環境を作成（推奨）
+python -m venv .venv
+
+# 仮想環境を有効化
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
+# 依存パッケージをインストール
+pip install -r requirements.txt
+```
+
+## 使用方法
+
+### 基本的な使い方
+
+```bash
+# uv使用
+uv run python deepwiki2md.py <DeepWiki URL>
+
+# pip使用（仮想環境有効化後）
+python deepwiki2md.py <DeepWiki URL>
+```
+
+### オプション
+
+| オプション             | 説明             | デフォルト    |
+| ---------------------- | ---------------- | ------------- |
+| `-o`, `--output`       | 出力ディレクトリ | `output`      |
+| `-l`, `--lang`         | 言語選択         | `japanese`    |
+| `-d`, `--diagram_type` | 図の出力形式     | `mermaid,svg` |
+
+### 図の出力形式（--diagram_type）
+
+- `png`: PNG画像のみ出力
+- `svg`: SVG画像のみ出力
+- `mermaid`: Mermaid記法のみ出力
+- 複数指定可（カンマ区切り）: `png,mermaid,svg`
+- 先頭の形式が直接表示、それ以外は`<details>`で折りたたみ
+
+### 例
+
+```bash
+# app.devin.ai/wiki（ログイン必要）
+uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo
+
+# deepwiki.com（ログイン不要）
+uv run python deepwiki2md.py https://deepwiki.com/owner/repo
+
+# 出力ディレクトリを指定
+uv run python deepwiki2md.py https://deepwiki.com/owner/repo -o ./my_docs
+
+# 英語で取得（app.devin.ai/wikiのみ）
+uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -l english
+
+# PNG画像のみ出力
+uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png
+
+# PNG優先、Mermaid・SVGは折りたたみ
+uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
+```
+
+## 実行の流れ
+
+### app.devin.ai/wikiの場合
+
+1. ツールを起動するとChromeブラウザが開きます
+2. ログインページが表示された場合は、手動でログインしてください
+3. ログイン完了後、ターミナルでEnterキーを押してください
+4. 言語選択画面で指定した言語を自動選択します
+5. 言語選択はデフォルトで**Japanease**となります。日本語のDeepWikiがすでに作成済みであること。
+6. ツールが自動的に全セクションを取得してMarkdownに変換します
+
+### deepwiki.comの場合
+
+1. ツールを起動するとChromeブラウザが開きます
+2. ログイン不要で自動的にページを読み込みます
+3. ツールが自動的に全セクションを取得してMarkdownに変換します
+
+## 出力ファイル
+
+```
+出力ディレクトリ/
+├── 00_table_of_contents.md  # 目次
+├── 01_概要.md               # 各セクションのMarkdown
+├── 02_システムアーキテクチャ.md
+├── ...
+└── images/                  # SVG図
+    ├── 01_概要_01.svg
+    ├── 01_概要_02.svg
+    └── ...
+```
+
+## ファイル構成
+
+| ファイル               | 説明                        |
+| ---------------------- | --------------------------- |
+| `deepwiki2md.py`       | メインスクリプト            |
+| `extract_subgraphs.py` | SVG→Mermaid変換モジュール   |
+| `html_to_markdown.py`  | HTML→Markdown変換モジュール |
+| `pyproject.toml`       | プロジェクト設定（uv用）    |
+| `requirements.txt`     | 依存パッケージ（pip用）     |
+
+## トラブルシューティング
+
+### ChromeDriverのエラー
+
+webdriver-managerが自動的にChromeDriverをダウンロードしますが、
+問題が発生した場合は手動でインストールしてください：
+
+- Windows: https://chromedriver.chromium.org/downloads
+- macOS: `brew install chromedriver`
+- Linux: `apt install chromium-chromedriver`
+
+### ログインセッションのリセット
+
+セッション情報は以下の場所に保存されます：
+
+- Windows: `%LOCALAPPDATA%\DeepWiki2Md\chrome_profile`
+- macOS: `~/Library/Application Support/DeepWiki2Md/chrome_profile`
+- Linux: `~/.config/deepwiki2mder/chrome_profile`
+
+問題が発生した場合は、このディレクトリを削除してください。
+
+## 注意事項
+
+- app.devin.ai/wikiは初回実行時にログインが必要です
+- deepwiki.comはログイン不要です
+- 大量のページがある場合、エクスポートに時間がかかります
+- ネットワーク状況によってはタイムアウトが発生する場合があります
+- deepwiki.comでは言語選択オプション（`-l`）は無視されます
