@@ -23,6 +23,18 @@ A tool to retrieve documents from DeepWiki and convert them to Markdown format.
 - `<details>` tag (collapsible) support
 - Session persistence (app.devin.ai/wiki only, no login required after first time)
 
+### Operation Modes
+
+This tool has two operation modes.
+
+**CUI Mode (Default)**
+
+This mode runs in the background without displaying a browser window. When login is required, you enter your email address and authentication code in the terminal. It is suitable for execution in server environments without GUI (such as SSH connections). However, it does not support OAuth authentication (GitHub/Google, etc.), so only email + authentication code login is available.
+
+**GUI Mode (--no-headless)**
+
+This mode runs with the browser window displayed. It is useful for initial setup and debugging as you can visually confirm login operations. Use this mode if you want to log in with OAuth authentication (GitHub/Google, etc.). When you specify an email address with the `-e` option, the email address is automatically entered on the login page and the Continue button is also automatically clicked.
+
 ## Supported Platforms
 
 - Windows
@@ -106,11 +118,13 @@ python deepwiki2md.py <DeepWiki URL>
 
 ### Options
 
-| Option                 | Description         | Default       |
-| ---------------------- | ------------------- | ------------- |
-| `-o`, `--output`       | Output directory    | `output`      |
-| `-l`, `--lang`         | Language selection  | `japanese`    |
-| `-d`, `--diagram_type` | Diagram output type | `mermaid,svg` |
+| Option                 | Description                              | Default       |
+| ---------------------- | ---------------------------------------- | ------------- |
+| `-o`, `--output`       | Output directory                         | `output`      |
+| `-l`, `--lang`         | Language selection                       | `japanese`    |
+| `-d`, `--diagram_type` | Diagram output type                      | `mermaid,svg` |
+| `-e`, `--email`        | Email address for login                  | None (prompt displayed) |
+| `--no-headless`        | Run in GUI mode (display browser window) | `false`       |
 
 ### Diagram Output Type (--diagram_type)
 
@@ -140,6 +154,12 @@ uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png
 
 # PNG first, Mermaid and SVG in collapsible sections
 uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
+
+# Specify email address
+uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -e user@example.com
+
+# Run in GUI mode (display browser window)
+uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --no-headless
 ```
 
 ## Execution Flow
@@ -158,6 +178,17 @@ uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
 1. The tool launches a Chrome browser
 2. No login required - the page loads automatically
 3. The tool automatically retrieves all sections and converts them to Markdown
+
+### Default Behavior (Headless Mode)
+
+1. The tool launches a headless browser (no display)
+2. If a login page is detected, you will be prompted to enter your email address via CUI
+   - If you specify an email address with the `-e` option, the input prompt will be skipped
+3. After entering your email, an authentication code will be sent to your email
+4. If an authentication code page is detected, you will be prompted to enter the code via CUI
+5. After successful login, the tool automatically retrieves all sections and converts them to Markdown
+
+**Note**: Headless mode only supports email + authentication code method. If you want to log in with OAuth (GitHub/Google, etc.), use the `--no-headless` option to run in GUI mode.
 
 ## Output Files
 
