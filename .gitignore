@@ -52,7 +52,7 @@ coverage.xml
 cover/
 
 # Translations
-*.mo
+# *.mo  # .moファイルはlocale/以下で追跡するためコメントアウト
 *.pot
 
 # Django stuff:
