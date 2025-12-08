@@ -181,7 +181,7 @@ class DeepWikiExporter:
         self.wait = WebDriverWait(self.driver, 30)
         return self.driver
     
-    def navigate_and_wait_for_login(self, url, headless=False):
+    def navigate_and_wait_for_login(self, url, headless=False, email=None):
         """URLに移動し、ユーザーのログインを待つ"""
         print(f"\nブラウザを開いています: {url}")
         self.driver.get(url)
@@ -201,7 +201,7 @@ class DeepWikiExporter:
             if headless:
                 # ヘッドレスモード: CUIでログイン情報を入力
                 if self._is_login_page() or self._is_code_page():
-                    login_success = self._handle_cui_login()
+                    login_success = self._handle_cui_login(email=email)
                     if not login_success:
                         print("ログインに失敗しました。終了します。")
                         return False
@@ -267,7 +267,7 @@ class DeepWikiExporter:
         except NoSuchElementException:
             return False
     
-    def _handle_cui_login(self):
+    def _handle_cui_login(self, email=None):
         """CUIベースのログイン処理（メール＋認証コード方式）"""
         max_attempts = 3
         
@@ -277,15 +277,21 @@ class DeepWikiExporter:
                 print("ログインページを検出しました（ヘッドレスモード）")
                 print("="*60)
                 
-                email = input("メールアドレスを入力してください: ").strip()
-                if not email:
+                # emailが指定されていない場合は入力プロンプトを表示
+                if email:
+                    email_to_use = email
+                    print(f"メールアドレス: {email_to_use}")
+                else:
+                    email_to_use = input("メールアドレスを入力してください: ").strip()
+                
+                if not email_to_use:
                     print("メールアドレスが入力されていません")
                     continue
                 
                 try:
                     email_input = self.driver.find_element(By.ID, 'username')
                     email_input.clear()
-                    email_input.send_keys(email)
+                    email_input.send_keys(email_to_use)
                     
                     continue_btn = self.driver.find_element(
                         By.CSS_SELECTOR,
@@ -1703,10 +1709,15 @@ def main():
     parser.add_argument('-l', '--lang', default='japanese', help='言語選択（デフォルト: japanese）※deepwiki.comでは無効')
     parser.add_argument('-d', '--diagram_type', default='mermaid,svg', 
                         help='図の出力形式（デフォルト: mermaid,svg）。png/svg/mermaidをカンマ区切りで指定')
-    parser.add_argument('--headless', action='store_true',
-                        help='ヘッドレスモードで実行（CUIログイン対応）')
+    parser.add_argument('--no-headless', action='store_true',
+                        help='GUIモードで実行（ブラウザ画面を表示）')
+    parser.add_argument('-e', '--email', default=None,
+                        help='ログイン用メールアドレス（指定しない場合は入力プロンプトを表示）')
     
     args = parser.parse_args()
+    
+    # headlessフラグを設定（デフォルトはTrue、--no-headlessでFalse）
+    args.headless = not args.no_headless
     
     # URLの検証
     if not args.url.startswith('http'):
@@ -1725,7 +1736,7 @@ def main():
         exporter.setup_browser(headless=args.headless)
         
         # ログインを待つ（deepwiki.comの場合はスキップ）
-        exporter.navigate_and_wait_for_login(args.url, headless=args.headless)
+        exporter.navigate_and_wait_for_login(args.url, headless=args.headless, email=args.email)
         
         # 言語を選択（deepwiki.comの場合はスキップ）
         if args.lang and exporter.site_type == DeepWikiExporter.SITE_DEVIN:
