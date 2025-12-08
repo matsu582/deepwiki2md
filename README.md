@@ -23,6 +23,18 @@ A tool to retrieve documents from DeepWiki and convert them to Markdown format.
 - `<details>` tag (collapsible) support
 - Session persistence (app.devin.ai/wiki only, no login required after first time)
 
+### Operation Modes
+
+This tool has two operation modes.
+
+**CUI Mode (Default)**
+
+This mode runs in the background without displaying a browser window. When login is required, you enter your email address and authentication code in the terminal. It is suitable for automated execution in server environments or CI/CD pipelines. However, it does not support OAuth authentication (GitHub/Google, etc.), so only email + authentication code login is available.
+
+**GUI Mode (--no-headless)**
+
+This mode runs with the browser window displayed. It is useful for initial setup and debugging as you can visually confirm login operations. Use this mode if you want to log in with OAuth authentication (GitHub/Google, etc.). When you specify an email address with the `-e` option, the email address is automatically entered on the login page and the Continue button is also automatically clicked.
+
 ## Supported Platforms
 
 - Windows
