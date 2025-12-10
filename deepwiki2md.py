@@ -1632,16 +1632,77 @@ class DeepWikiExporter:
         )
         return svg_content
     
+    def _scale_svg_to_fit_viewport(self, svg_content, max_width=2400, max_height=1300):
+        """SVGのサイズがビューポートを超える場合、アスペクト比を維持して縮小する
+        
+        ビューポートサイズ（2560x1440）より少し小さい上限を設定し、
+        SVGがこの範囲に収まるようにスケーリングする。
+        """
+        svg_match = re.search(r'<svg\b([^>]*)>', svg_content, re.IGNORECASE)
+        if not svg_match:
+            return svg_content
+        
+        attrs = svg_match.group(1)
+        
+        width_match = re.search(r'\bwidth\s*=\s*"([^"]+)"', attrs)
+        height_match = re.search(r'\bheight\s*=\s*"([^"]+)"', attrs)
+        
+        if not width_match or not height_match:
+            return svg_content
+        
+        try:
+            width_str = width_match.group(1)
+            height_str = height_match.group(1)
+            current_w = float(re.sub(r'[^\d.]', '', width_str))
+            current_h = float(re.sub(r'[^\d.]', '', height_str))
+            
+            if current_w <= 0 or current_h <= 0:
+                return svg_content
+            
+            if current_w <= max_width and current_h <= max_height:
+                return svg_content
+            
+            scale_w = max_width / current_w
+            scale_h = max_height / current_h
+            scale = min(scale_w, scale_h, 1.0)
+            
+            if scale >= 1.0:
+                return svg_content
+            
+            new_w = current_w * scale
+            new_h = current_h * scale
+            
+            new_attrs = re.sub(
+                r'\bwidth\s*=\s*"[^"]+"',
+                f'width="{new_w:.2f}"',
+                attrs
+            )
+            new_attrs = re.sub(
+                r'\bheight\s*=\s*"[^"]+"',
+                f'height="{new_h:.2f}"',
+                new_attrs
+            )
+            
+            svg_content = (
+                svg_content[:svg_match.start(1)] +
+                new_attrs +
+                svg_content[svg_match.end(1):]
+            )
+            
+            return svg_content
+            
+        except (ValueError, AttributeError):
+            return svg_content
+    
     def convert_svg_to_png(self, svg_path, png_path):
         """SVGファイルをブラウザでレンダリングしてPNGに変換"""
         try:
-            # SVGファイルを読み込み
             svg_content = Path(svg_path).read_text(encoding='utf-8')
             
-            # SVGのwidth/heightを補完（viewBoxから）
             svg_content = self._fix_svg_dimensions(svg_content)
             
-            # SVGをラップするHTMLを作成（背景透過、余白なし）
+            svg_content = self._scale_svg_to_fit_viewport(svg_content)
+            
             wrapper_html = f'''<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -1650,7 +1711,6 @@ class DeepWikiExporter:
 </body>
 </html>'''
             
-            # 一時HTMLファイルに書き出し
             with tempfile.NamedTemporaryFile(
                 mode='w', suffix='.html', delete=False, encoding='utf-8'
             ) as tmp_file:
@@ -1658,25 +1718,20 @@ class DeepWikiExporter:
                 tmp_html_path = tmp_file.name
             
             try:
-                # file://でHTMLを開く
                 file_uri = Path(tmp_html_path).as_uri()
                 self.png_driver.get(file_uri)
                 
-                # SVG要素を取得
                 svg_elem = self.png_driver.find_element(By.TAG_NAME, 'svg')
                 
-                # 要素をビューポート内にスクロール
                 self.png_driver.execute_script(
                     "arguments[0].scrollIntoView(true);", svg_elem
                 )
-                time.sleep(0.2)  # レンダリング完了を待機
+                time.sleep(0.2)
                 
-                # SVG要素のみをスクリーンショット
                 svg_elem.screenshot(png_path)
                 return True
                 
             finally:
-                # 一時ファイルを削除
                 try:
                     os.unlink(tmp_html_path)
                 except:
