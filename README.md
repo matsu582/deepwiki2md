@@ -241,8 +241,8 @@ This tool is compatible with the DeepWiki site structure as of the following dat
 
 | Site | Verified | Key Structures |
 | --- | --- | --- |
-| deepwiki.com | 2025-06-23 | Content: `div[class*="prose-custom"]`, Sidebar: link-based |
-| app.devin.ai/wiki | 2025-06-23 | Content: `div.prose-main`, Sidebar: `a[href*="/page/"]` (/page/X.Y format), Language: `menuitemradio` inside "..." menu, URL: `/org/{org}/wiki/{owner}/{repo}/page/{num}` |
+| deepwiki.com | 2026-06-23 | Content: `div[class*="prose-custom"]`, Sidebar: link-based |
+| app.devin.ai/wiki | 2026-06-23 | Content: `div.prose-main`, Sidebar: `a[href*="/page/"]` (/page/X.Y format), Language: `menuitemradio` inside "..." menu, URL: `/org/{org}/wiki/{owner}/{repo}/page/{num}` |
 
 DeepWiki's site structure may change without notice. If the tool stops working, a structural change is likely the cause.
 
