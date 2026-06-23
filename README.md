@@ -43,7 +43,7 @@ This mode runs with the browser window displayed. It is useful for initial setup
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Chrome/Chromium browser
 - uv (recommended) or pip
 
