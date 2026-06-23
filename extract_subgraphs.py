@@ -274,8 +274,8 @@ def extract_nodes_simple(svg_content):
         if not class_match or 'node' not in class_match.group(1):
             continue
         
-        # id属性からflowchart-XXX-NNNを抽出
-        id_match = re.search(r'id="flowchart-([^"]+)-(\d+)"', tag_text)
+        # id属性からflowchart-XXX-NNNを抽出（SVG ID接頭辞あり/なし両対応）
+        id_match = re.search(r'id="(?:[^"]*-)?flowchart-([^"]+)-(\d+)"', tag_text)
         if not id_match:
             continue
         
@@ -351,22 +351,84 @@ def assign_nodes_to_clusters(node_positions, clusters):
     
     return node_cluster_map
 
+def _resolve_edge_nodes(middle_part, nodes, separator='_'):
+    """エッジID中間部分から既知ノードIDペアを特定する
+
+    middle_part例: "EXCEL_EXT_XLS_CONV" を全separator位置で分割し、
+    両方が既知ノードIDとなる組を探して返す
+    """
+    positions = [i for i, c in enumerate(middle_part) if c == separator]
+    for pos in positions:
+        from_candidate = middle_part[:pos]
+        to_candidate = middle_part[pos + 1:]
+        if from_candidate in nodes and to_candidate in nodes:
+            return (from_candidate, to_candidate)
+    return None
+
+
+def _detect_arrow_type(path_tag):
+    """エッジpath要素のmarker属性から矢印タイプを判定する
+
+    pointEnd=矢印あり、それ以外（circle/cross/なし）=矢印なし
+    戻り値: '-->' / '<-->' / '---'
+    """
+    marker_end = re.search(r'marker-end="([^"]*)"', path_tag)
+    marker_start = re.search(r'marker-start="([^"]*)"', path_tag)
+    has_end = bool(marker_end and 'pointEnd' in marker_end.group(1))
+    has_start = bool(marker_start and 'pointStart' in marker_start.group(1))
+    if has_end and has_start:
+        return '<-->'
+    elif has_end:
+        return '-->'
+    elif has_start:
+        return '<--'
+    return '---'
+
+
 def extract_edges(svg_content, nodes):
-    """SVGからエッジ情報を抽出（インデックスベースのラベルマッピング対応）"""
+    """SVGからエッジ情報を抽出（ノードID辞書による曖昧性解消方式）
+
+    Mermaid SVGのエッジID形式: id="L_FROM_TO_INDEX"（全アンダースコア区切り）
+    ノードIDにアンダースコアが含まれる場合は単純分割では曖昧になるため、
+    既知のノードID辞書を使って正しい分割点を特定する
+    旧形式（ダッシュ区切り id="L-FROM-TO-INDEX"）にもフォールバック対応
+
+    エッジラベルはSVG内の出現順序（位置ベース）でマッピングする
+    矢印タイプはpath要素のmarker-end属性から判定する
+    """
     edges = []
-    edge_indices = []
-    edge_pattern = r'id="L[-_]([^-_]+)[-_]([^-_]+)[-_](\d+)"'
-    
-    for match in re.finditer(edge_pattern, svg_content):
-        from_node = match.group(1)
-        to_node = match.group(2)
-        idx = int(match.group(3))
-        if from_node in nodes and to_node in nodes:
-            edges.append((from_node, to_node))
-            edge_indices.append(idx)
-    
-    # 全edgeLabelグループを抽出（空も含む）
-    # これによりインデックスの対応を維持
+    edge_arrow_types = []
+    edge_positions = []
+    seen_pairs = set()
+
+    # 方式1: アンダースコア区切り形式（現行Mermaid、SVG ID接頭辞対応）
+    # path要素全体を取得して矢印タイプも判定する
+    edge_path_pattern = r'<path[^>]*id="(?:[^"]*-)?L_(.+?)_(\d+)"[^>]*/?>'
+    all_edge_matches = list(re.finditer(edge_path_pattern, svg_content))
+    for pos_idx, match in enumerate(all_edge_matches):
+        middle = match.group(1)
+        resolved = _resolve_edge_nodes(middle, nodes, '_')
+        if resolved and resolved not in seen_pairs:
+            arrow = _detect_arrow_type(match.group(0))
+            edges.append(resolved)
+            edge_arrow_types.append(arrow)
+            edge_positions.append(pos_idx)
+            seen_pairs.add(resolved)
+
+    # 方式2: ダッシュ区切り形式（旧Mermaidフォールバック）
+    if not edges:
+        edge_path_pattern_dash = r'<path[^>]*id="L-(.+?)-(\d+)"[^>]*/?>'
+        for pos_idx, match in enumerate(re.finditer(edge_path_pattern_dash, svg_content)):
+            middle = match.group(1)
+            resolved = _resolve_edge_nodes(middle, nodes, '-')
+            if resolved and resolved not in seen_pairs:
+                arrow = _detect_arrow_type(match.group(0))
+                edges.append(resolved)
+                edge_arrow_types.append(arrow)
+                edge_positions.append(pos_idx)
+                seen_pairs.add(resolved)
+
+    # edgeLabelグループを出現順に抽出（位置ベースでエッジと対応）
     edge_labels = []
     edge_label_group_pattern = r'<g[^>]*class="edgeLabel"[^>]*>(.*?)</g>'
     for match in re.finditer(edge_label_group_pattern, svg_content, re.DOTALL):
@@ -374,11 +436,11 @@ def extract_edges(svg_content, nodes):
         text_match = re.search(r'<span class="edgeLabel"[^>]*>(?:<p[^>]*>)?([^<]*)', content)
         label = text_match.group(1).strip() if text_match else ''
         edge_labels.append(label)
-    
-    return edges, edge_labels, edge_indices
 
-def generate_mermaid_flowchart(nodes, node_order, clusters, node_cluster_map, edges, edge_labels, edge_indices, node_shapes, direction="TB"):
-    """Mermaidフローチャートを生成（SVG形状タイプ対応、インデックスベースラベルマッピング、方向指定対応）"""
+    return edges, edge_labels, edge_positions, edge_arrow_types
+
+def generate_mermaid_flowchart(nodes, node_order, clusters, node_cluster_map, edges, edge_labels, edge_positions, edge_arrow_types, node_shapes, direction="TB"):
+    """Mermaidフローチャートを生成（SVG形状タイプ対応、位置ベースラベルマッピング、矢印タイプ対応）"""
     lines = [f'flowchart {direction}', '']
     
     if clusters and node_cluster_map:
@@ -428,18 +490,25 @@ def generate_mermaid_flowchart(nodes, node_order, clusters, node_cluster_map, ed
             lines.append(f'    {node_id}{shape}')
         lines.append('')
     
-    # エッジを出力（ダブルクォートで囲んで括弧をエスケープ）
+    # エッジを出力（位置ベースラベルマッピング、矢印タイプ対応）
     lines.append('%% エッジ')
     for j, (from_node, to_node) in enumerate(edges):
-        edge_idx = edge_indices[j] if j < len(edge_indices) else -1
-        raw_label = edge_labels[edge_idx] if 0 <= edge_idx < len(edge_labels) else ''
+        pos = edge_positions[j] if j < len(edge_positions) else -1
+        raw_label = edge_labels[pos] if 0 <= pos < len(edge_labels) else ''
         label = sanitize_mermaid_label(raw_label)
+        arrow = edge_arrow_types[j] if j < len(edge_arrow_types) else '-->'
         if label:
-            # ダブルクォートで囲んで括弧をエスケープ
             safe_label = label.replace('"', "'")
-            lines.append(f'    {from_node} -->|"{safe_label}"| {to_node}')
+            if arrow == '---':
+                lines.append(f'    {from_node} ---|"{safe_label}"| {to_node}')
+            elif arrow == '<-->':
+                lines.append(f'    {from_node} <-->|"{safe_label}"| {to_node}')
+            elif arrow == '<--':
+                lines.append(f'    {to_node} -->|"{safe_label}"| {from_node}')
+            else:
+                lines.append(f'    {from_node} -->|"{safe_label}"| {to_node}')
         else:
-            lines.append(f'    {from_node} --> {to_node}')
+            lines.append(f'    {from_node} {arrow} {to_node}')
     
     return '\n'.join(lines)
 
@@ -529,7 +598,8 @@ def extract_mermaid_from_svg(svg_content):
         all_node_shapes = {}
         all_edges = []
         all_edge_labels = []
-        all_edge_indices = []
+        all_edge_positions = []
+        all_edge_arrow_types = []
         
         for rg in filtered_groups:
             ox, oy = rg['offset_x'], rg['offset_y']
@@ -555,14 +625,16 @@ def extract_mermaid_from_svg(svg_content):
                     all_node_order.append(nid)
             
             # このルートグループ内のエッジを抽出
-            edges, labels, indices = extract_edges(inner, all_nodes)
+            edges, labels, positions, arrow_types = extract_edges(inner, all_nodes)
             base_idx = len(all_edge_labels)
             for e in edges:
                 all_edges.append(e)
             for lbl in labels:
                 all_edge_labels.append(lbl)
-            for idx in indices:
-                all_edge_indices.append(idx + base_idx)
+            for pos in positions:
+                all_edge_positions.append(pos + base_idx)
+            for at in arrow_types:
+                all_edge_arrow_types.append(at)
         
         if not all_nodes:
             return None
@@ -573,7 +645,7 @@ def extract_mermaid_from_svg(svg_content):
         node_cluster_map = assign_nodes_to_clusters(all_node_positions, all_clusters)
         return generate_mermaid_flowchart(
             all_nodes, all_node_order, all_clusters, node_cluster_map,
-            all_edges, all_edge_labels, all_edge_indices, all_node_shapes, direction
+            all_edges, all_edge_labels, all_edge_positions, all_edge_arrow_types, all_node_shapes, direction
         )
     
     # 単一ルートまたはルートなしの場合は従来の処理
@@ -584,12 +656,12 @@ def extract_mermaid_from_svg(svg_content):
         return None
     
     node_cluster_map = assign_nodes_to_clusters(node_positions, clusters) if clusters else {}
-    edges, edge_labels, edge_indices = extract_edges(svg_content, nodes)
+    edges, edge_labels, edge_positions, edge_arrow_types = extract_edges(svg_content, nodes)
     
     # ノード・エッジ抽出後に方向を判定
     direction = infer_direction_from_layout(node_positions, edges)
     
-    return generate_mermaid_flowchart(nodes, node_order, clusters, node_cluster_map, edges, edge_labels, edge_indices, node_shapes, direction)
+    return generate_mermaid_flowchart(nodes, node_order, clusters, node_cluster_map, edges, edge_labels, edge_positions, edge_arrow_types, node_shapes, direction)
 
 def extract_sequence_diagram(svg_content):
     """シーケンス図を抽出（参加者、メッセージ、矢印、loop/alt/optを正確に抽出）"""
