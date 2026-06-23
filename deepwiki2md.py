@@ -165,13 +165,13 @@ class DeepWikiExporter:
         os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
     
     def detect_site_type(self, url):
-        """URLからサイト種別を判定"""
+        """URLからサイト種別を判定（/org/パス形式にも対応）"""
         if 'deepwiki.com' in url:
             self.site_type = self.SITE_DEEPWIKI
-        elif 'app.devin.ai/wiki' in url:
+        elif 'app.devin.ai' in url and '/wiki' in url:
+            # /org/{org}/wiki/... または /wiki/... の両パターンに対応
             self.site_type = self.SITE_DEVIN
         else:
-            # デフォルトはdeepwiki.com形式として扱う
             self.site_type = self.SITE_DEEPWIKI
         print(_("Site type: {}").format(self.site_type))
     
@@ -253,20 +253,28 @@ class DeepWikiExporter:
                 print("\n" + "="*60)
                 print(_("Login required."))
                 
-                # -eオプションでメールアドレスが指定されている場合は自動入力してContinueボタンをクリック
+                # -eオプションでメールアドレスが指定されている場合は自動入力
                 if email and self._is_login_page():
                     print(_("Auto-filling email address: {}").format(email))
                     try:
-                        email_input = self.driver.find_element(By.ID, 'username')
+                        # 新構造: input[type="email"]、旧構造: input#username
+                        try:
+                            email_input = self.driver.find_element(
+                                By.CSS_SELECTOR, 'input[type="email"]'
+                            )
+                        except NoSuchElementException:
+                            email_input = self.driver.find_element(
+                                By.ID, 'username'
+                            )
                         email_input.clear()
                         email_input.send_keys(email)
                         
-                        # Continueボタンをクリック
-                        continue_btn = self.driver.find_element(
+                        # 送信ボタンをクリック
+                        submit_btn = self.driver.find_element(
                             By.CSS_SELECTOR,
-                            'button[type="submit"][name="action"][value="default"]'
+                            'button[type="submit"]'
                         )
-                        continue_btn.click()
+                        submit_btn.click()
                         print(_("Email entered and Continue button clicked."))
                         print(_("Authentication code will be sent to your email."))
                         time.sleep(3)
@@ -289,12 +297,12 @@ class DeepWikiExporter:
         try:
             # サイト種別に応じてセレクタを選択
             if self.site_type == self.SITE_DEEPWIKI:
-                # deepwiki.com用の高速セレクタ（h1やarticleを優先）
-                selectors = ['h1', 'article', '[class*="content"]', 'main']
-                extra_wait = 0.2  # 追加待機を短縮
+                # deepwiki.com用: proseベースのコンテンツ領域を検出
+                selectors = ['div[class*="prose-custom"]', 'div[class*="prose"]', 'h1', 'article', 'main']
+                extra_wait = 0.2
             else:
-                # app.devin.ai/wiki用のセレクタ
-                selectors = ['[class*="content"]', '[class*="markdown"]', 'article', 'main', '.prose']
+                # app.devin.ai/wiki用: prose-mainベースのコンテンツ領域を検出
+                selectors = ['div.prose-main', 'div[class*="prose"]', 'h1', 'article', 'main']
                 extra_wait = 0.5
             
             # 短いタイムアウトで各セレクタを試行
@@ -316,6 +324,15 @@ class DeepWikiExporter:
     def _is_login_page(self):
         """ログインページかどうかを判定（メールアドレス入力ページ）"""
         try:
+            # 新構造: input[type="email"] （IDなし）
+            self.driver.find_element(
+                By.CSS_SELECTOR, 'input[type="email"]'
+            )
+            return True
+        except NoSuchElementException:
+            pass
+        # 旧構造: input#username
+        try:
             self.driver.find_element(By.ID, 'username')
             return True
         except NoSuchElementException:
@@ -323,6 +340,16 @@ class DeepWikiExporter:
     
     def _is_code_page(self):
         """認証コード入力ページかどうかを判定"""
+        try:
+            # 新構造: input[autocomplete="one-time-code"] （IDなし）
+            self.driver.find_element(
+                By.CSS_SELECTOR,
+                'input[autocomplete="one-time-code"]'
+            )
+            return True
+        except NoSuchElementException:
+            pass
+        # 旧構造: input#code
         try:
             self.driver.find_element(By.ID, 'code')
             return True
@@ -351,15 +378,30 @@ class DeepWikiExporter:
                     continue
                 
                 try:
-                    email_input = self.driver.find_element(By.ID, 'username')
+                    # 新構造: input[type="email"] を優先、旧構造: input#username
+                    try:
+                        email_input = self.driver.find_element(
+                            By.CSS_SELECTOR, 'input[type="email"]'
+                        )
+                    except NoSuchElementException:
+                        email_input = self.driver.find_element(
+                            By.ID, 'username'
+                        )
                     email_input.clear()
                     email_input.send_keys(email_to_use)
                     
-                    continue_btn = self.driver.find_element(
-                        By.CSS_SELECTOR,
-                        'button[type="submit"][name="action"][value="default"]'
-                    )
-                    continue_btn.click()
+                    # 新構造: button[type="submit"]、旧構造: button[name="action"]
+                    try:
+                        submit_btn = self.driver.find_element(
+                            By.CSS_SELECTOR,
+                            'button[type="submit"]'
+                        )
+                    except NoSuchElementException:
+                        submit_btn = self.driver.find_element(
+                            By.CSS_SELECTOR,
+                            'button[type="submit"][name="action"]'
+                        )
+                    submit_btn.click()
                     
                     time.sleep(3)
                 except Exception as e:
@@ -378,15 +420,25 @@ class DeepWikiExporter:
                     continue
                 
                 try:
-                    code_input = self.driver.find_element(By.ID, 'code')
+                    # 新構造: input[autocomplete="one-time-code"]、旧構造: input#code
+                    try:
+                        code_input = self.driver.find_element(
+                            By.CSS_SELECTOR,
+                            'input[autocomplete="one-time-code"]'
+                        )
+                    except NoSuchElementException:
+                        code_input = self.driver.find_element(
+                            By.ID, 'code'
+                        )
                     code_input.clear()
                     code_input.send_keys(code)
                     
-                    continue_btn = self.driver.find_element(
+                    # 新構造: button[type="submit"]（テキスト"Continue"）
+                    submit_btn = self.driver.find_element(
                         By.CSS_SELECTOR,
-                        'button[type="submit"][name="action"][value="default"]'
+                        'button[type="submit"]'
                     )
-                    continue_btn.click()
+                    submit_btn.click()
                     
                     time.sleep(3)
                 except Exception as e:
@@ -401,10 +453,9 @@ class DeepWikiExporter:
         return False
     
     def select_language(self, lang):
-        """言語プルダウンから指定された言語を選択（Radix UI対応）"""
+        """「...」メニュー内の言語サブメニューから言語を選択"""
         print(_("\nSelecting language: {}").format(lang))
         
-        # 言語名のマッピング（引数 -> 表示名）
         lang_map = {
             'japanese': 'Japanese',
             'english': 'English',
@@ -421,103 +472,131 @@ class DeepWikiExporter:
         target_lang = lang_map.get(lang.lower(), lang.capitalize())
         
         try:
-            # Radix UIのコンボボックスを探す
-            dropdown_selectors = [
-                'button[role="combobox"]',
-                'button[data-slot="select-trigger"]',
-                '[data-state] button[aria-expanded]',
-                'button[aria-controls*="radix"]'
-            ]
-            
-            dropdown = None
-            for selector in dropdown_selectors:
-                try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for elem in elements:
-                        # 言語名が含まれているボタンを探す
-                        text = elem.text.strip()
-                        if text in lang_map.values() or any(l in text for l in lang_map.values()):
-                            dropdown = elem
-                            print(_("  Language dropdown detected: {} (current: {})").format(selector, text))
-                            break
-                    if dropdown:
-                        break
-                except:
-                    continue
-            
-            if not dropdown:
-                print(_("  Warning: Language dropdown not found"))
+            # 「More actions」ボタン（...メニュー）を探す
+            more_btn = self._find_more_actions_button()
+            if not more_btn:
+                print(_("  Warning: More actions button not found"))
                 return False
             
-            # 現在の言語を確認
-            current_lang = dropdown.text.strip()
-            if current_lang.lower() == target_lang.lower():
-                print(_("  {} is already selected").format(target_lang))
-                return True
-            
-            # 通知バナーを非表示にする（クリックを妨げる要素を除去）
-            try:
-                self.driver.execute_script("""
-                    const banners = document.querySelectorAll('.bg-yellow-100, [class*="banner"], [class*="notification"]');
-                    banners.forEach(b => b.style.display = 'none');
-                """)
-            except:
-                pass
-            
-            # ドロップダウンをクリックして開く（JavaScriptで直接クリック）
-            try:
-                self.driver.execute_script("arguments[0].click();", dropdown)
-            except:
-                dropdown.click()
+            # メニューを開く
+            self.driver.execute_script(
+                "arguments[0].click();", more_btn
+            )
             time.sleep(0.5)
             
-            # ドロップダウンメニューから言語を選択
-            # Radix UIのオプションを探す
-            option_selectors = [
-                f'[role="option"]',
-                f'[data-slot="select-item"]',
-                f'[data-radix-collection-item]'
-            ]
+            # Languageメニュー項目を探してホバー
+            lang_item = self._find_language_menu_item()
+            if not lang_item:
+                print(_("  Warning: Language menu item not found"))
+                self._close_menu(more_btn)
+                return False
             
-            for selector in option_selectors:
-                try:
-                    options = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for opt in options:
-                        opt_text = opt.text.strip()
-                        if opt_text.lower() == target_lang.lower():
-                            opt.click()
-                            print(_("  Language selected: {}").format(opt_text))
-                            time.sleep(1)
-                            self.wait_for_page_load()
-                            return True
-                except:
-                    continue
+            # 現在選択中の言語を確認
+            item_text = lang_item.text.strip()
+            if target_lang.lower() in item_text.lower():
+                # 既に対象言語かもしれない（テキストに含まれるか確認）
+                pass
             
-            # XPathでテキスト検索（フォールバック）
-            try:
-                option = self.driver.find_element(
-                    By.XPATH,
-                    f"//*[@role='option' and contains(text(), '{target_lang}')]"
-                )
-                option.click()
+            # Languageサブメニューを開く（ホバーまたはクリック）
+            from selenium.webdriver.common.action_chains import ActionChains
+            actions = ActionChains(self.driver)
+            actions.move_to_element(lang_item).perform()
+            time.sleep(0.5)
+            
+            # サブメニュー内のmenuitemradioから言語を選択
+            selected = self._select_language_radio(target_lang)
+            if selected:
                 print(_("  Language selected: {}").format(target_lang))
-                time.sleep(1)
+                time.sleep(1.5)
                 self.wait_for_page_load()
                 return True
-            except:
-                pass
             
-            print(_("  Warning: Language '{}' not found").format(target_lang))
-            # ドロップダウンを閉じる
-            try:
-                dropdown.click()
-            except:
-                pass
+            print(_("  Warning: Language '{}' not found in submenu").format(
+                target_lang
+            ))
+            self._close_menu(more_btn)
             return False
                 
         except Exception as e:
             print(_("  Language selection error: {}").format(e))
             return False
+    
+    def _find_more_actions_button(self):
+        """「...」メニューボタンを検索"""
+        selectors = [
+            'button[aria-label="More actions"]',
+            'button[aria-label="その他のアクション"]',
+        ]
+        for sel in selectors:
+            try:
+                elems = self.driver.find_elements(By.CSS_SELECTOR, sel)
+                if elems:
+                    return elems[0]
+            except Exception:
+                continue
+        # フォールバック: aria-expandedを持つ最後のヘッダーボタン
+        try:
+            header_btns = self.driver.find_elements(
+                By.CSS_SELECTOR, 'header button[aria-expanded]'
+            )
+            if header_btns:
+                return header_btns[-1]
+        except Exception:
+            pass
+        return None
+    
+    def _find_language_menu_item(self):
+        """メニュー内のLanguage項目を検索"""
+        try:
+            items = self.driver.find_elements(
+                By.CSS_SELECTOR, '[role="menuitem"]'
+            )
+            for item in items:
+                txt = item.text.strip().lower()
+                if 'language' in txt or '言語' in txt:
+                    return item
+        except Exception:
+            pass
+        return None
+    
+    def _select_language_radio(self, target_lang):
+        """menuitemradioから対象言語を選択"""
+        try:
+            radios = self.driver.find_elements(
+                By.CSS_SELECTOR, '[role="menuitemradio"]'
+            )
+            for radio in radios:
+                radio_text = radio.text.strip()
+                if radio_text.lower() == target_lang.lower():
+                    self.driver.execute_script(
+                        "arguments[0].click();", radio
+                    )
+                    return True
+        except Exception:
+            pass
+        # XPathフォールバック
+        try:
+            radio_el = self.driver.find_element(
+                By.XPATH,
+                "//*[@role='menuitemradio' and "
+                "contains(text(), '{}')]".format(target_lang)
+            )
+            self.driver.execute_script(
+                "arguments[0].click();", radio_el
+            )
+            return True
+        except Exception:
+            pass
+        return False
+    
+    def _close_menu(self, trigger_btn):
+        """メニューを閉じる"""
+        try:
+            self.driver.execute_script(
+                "arguments[0].click();", trigger_btn
+            )
+        except Exception:
+            pass
     
     def get_wiki_sections(self):
         """DeepWikiのセクション一覧を取得（サイト種別に応じて処理）"""
@@ -528,7 +607,7 @@ class DeepWikiExporter:
                 # deepwiki.com: <a>タグベースのナビゲーション
                 sections = self._get_sections_deepwiki()
             else:
-                # app.devin.ai/wiki: <button>タグベースのナビゲーション
+                # app.devin.ai/wiki: <a>タグベースのナビゲーション（/page/X.Y形式）
                 sections = self._get_sections_devin()
             
         except Exception as e:
@@ -542,9 +621,10 @@ class DeepWikiExporter:
         """deepwiki.com用のセクション取得（<a>タグベース）"""
         sections = []
         
-        # サイドバーの<a>要素を取得
+        # サイドバーの<a>要素を取得（新旧両方の構造に対応）
         sidebar_selectors = [
-            'ul[devin-scrollable="true"] li a',
+            'ul li a[data-selected]',
+            'ul[class*="overflow-y-auto"][class*="space-y"] li a',
             'ul li a[href*="/"]',
             '[class*="sidebar"] li a',
             'aside li a',
@@ -625,85 +705,93 @@ class DeepWikiExporter:
         return sections
     
     def _get_sections_devin(self):
-        """app.devin.ai/wiki用のセクション取得（<button>タグベース）"""
+        """app.devin.ai/wiki用のセクション取得（<a>タグベース、/page/X.Y形式）"""
         sections = []
         
-        # サイドバーのbutton要素を取得
+        # サイドバーのリンク要素を取得（ボタンからリンクに変更された構造に対応）
         sidebar_selectors = [
-            'ul.flex-1 li button',
-            'ul.overflow-y-auto li button',
-            '[class*="sidebar"] li button',
-            'aside li button',
-            'nav li button'
+            'a[href*="/page/"]',
+            'ul li a[aria-label]',
+            'ul li div a[href*="/wiki/"]',
         ]
         
         # サイドバーが完全に読み込まれるまで待機
-        buttons = []
+        links = []
         best_selector = None
         max_wait = 10
         for wait_count in range(max_wait):
             for selector in sidebar_selectors:
                 try:
-                    found = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if len(found) > len(buttons):
-                        buttons = found
+                    found = self.driver.find_elements(
+                        By.CSS_SELECTOR, selector
+                    )
+                    # wikiページリンクのみをフィルタ
+                    valid = [
+                        lnk for lnk in found
+                        if lnk.get_attribute('href')
+                        and '/page/' in lnk.get_attribute('href')
+                    ]
+                    if len(valid) > len(links):
+                        links = valid
                         best_selector = selector
                 except NoSuchElementException:
                     continue
             
-            if len(buttons) >= 3:
+            if len(links) >= 3:
                 break
             
             time.sleep(1)
         
-        if buttons and best_selector:
-            print(_("  Sidebar detected: {} ({} items)").format(best_selector, len(buttons)))
+        if links and best_selector:
+            print(_("  Sidebar detected: {} ({} items)").format(
+                best_selector, len(links)
+            ))
         
-        if not buttons:
-            print(_("  Warning: Sidebar button elements not found"))
+        if not links:
+            print(_("  Warning: Sidebar link elements not found"))
             return sections
         
-        # 各buttonのメタ情報を取得（padding-leftから階層を判定）
-        padding_values = set()
-        for btn in buttons:
+        # 各リンクの情報を収集（hrefの/page/X.Y形式から階層レベルを判定）
+        seen_hrefs = set()
+        for idx, link in enumerate(links):
             try:
-                li_elem = btn.find_element(By.XPATH, '..')
-                style = li_elem.get_attribute('style') or ''
-                padding_match = re.search(r'padding-left:\s*(\d+)px', style)
-                if padding_match:
-                    padding_values.add(int(padding_match.group(1)))
-            except:
-                pass
-        
-        # padding値をソートしてレベルマッピングを作成
-        sorted_paddings = sorted(padding_values)
-        padding_to_level = {p: i for i, p in enumerate(sorted_paddings)}
-        
-        print(_("  Detected hierarchy levels: {} levels").format(len(sorted_paddings)))
-        
-        # 各buttonの情報を収集
-        for idx, btn in enumerate(buttons):
-            try:
-                text = btn.text.strip()
+                # aria-labelまたはテキストからタイトルを取得
+                text = link.get_attribute('aria-label') or ''
+                if not text:
+                    text = link.text.strip()
+                    # 親要素のテキストを試す
+                    if not text:
+                        parent = link.find_element(By.XPATH, '..')
+                        text = parent.text.strip()
                 if not text:
                     continue
                 
-                # 親のli要素からpadding-leftを取得
-                li_elem = btn.find_element(By.XPATH, '..')
-                style = li_elem.get_attribute('style') or ''
-                padding_match = re.search(r'padding-left:\s*(\d+)px', style)
-                padding = int(padding_match.group(1)) if padding_match else 0
-                level = padding_to_level.get(padding, 0)
+                href = link.get_attribute('href') or ''
+                
+                # 同一hrefのリンクが複数存在する場合、最初のもののみ採用
+                href_path = re.sub(r'^https?://[^/]+', '', href)
+                if href_path in seen_hrefs:
+                    continue
+                seen_hrefs.add(href_path)
+                
+                # /page/X.Y のパターンからレベルを判定
+                level = 0
+                page_match = re.search(r'/page/([\d.]+)$', href)
+                if page_match:
+                    page_num = page_match.group(1)
+                    level = page_num.count('.')
                 
                 sections.append({
                     'title': text,
                     'index': idx,
                     'level': level,
-                    'padding': padding
+                    'href': href
                 })
                 
             except Exception as e:
-                print(_("  Button info retrieval error (index={}): {}").format(idx, e))
+                print(_("  Link info retrieval error (index={}): {}").format(
+                    idx, e
+                ))
                 continue
         
         print(_("  Retrieved sections: {}").format(len(sections)))
@@ -745,24 +833,39 @@ class DeepWikiExporter:
     def extract_page_html(self):
         """現在のページのHTMLを取得"""
         try:
-            # サイト種別に応じてセレクタを選択（wait_for_page_loadと統一）
+            # サイト種別に応じてセレクタを選択
             if self.site_type == self.SITE_DEEPWIKI:
-                # deepwiki.com用: [class*="markdown"]は小さな要素にマッチする可能性があるため除外
-                content_selectors = ['article', 'main', '[class*="content"]']
+                # deepwiki.com用: prose-customがメインコンテンツ領域
+                content_selectors = [
+                    'div[class*="prose-custom"]',
+                    'div[class*="prose"]',
+                    'article', 'main',
+                ]
             else:
-                # app.devin.ai/wiki用
-                content_selectors = ['article', 'main', '[class*="content"]', '[class*="markdown"]']
+                # app.devin.ai/wiki用: prose-mainがメインコンテンツ領域
+                content_selectors = [
+                    'div.prose-main',
+                    'div[class*="prose"]',
+                    'article', 'main',
+                ]
             
             for selector in content_selectors:
                 try:
-                    elem = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if elem:
-                        html = elem.get_attribute('innerHTML')
-                        return html
+                    elems = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    # 最もコンテンツ量の多い要素を選択（小さなprose要素を除外）
+                    best_elem = None
+                    best_len = 0
+                    for elem in elems:
+                        html = elem.get_attribute('innerHTML') or ''
+                        if len(html) > best_len:
+                            best_len = len(html)
+                            best_elem = elem
+                    if best_elem and best_len > 100:
+                        return best_elem.get_attribute('innerHTML')
                 except NoSuchElementException:
                     continue
             
-            # 見つからない場合はbody全体
+            # フォールバック: body全体
             html = self.driver.find_element(By.TAG_NAME, 'body').get_attribute('innerHTML')
             return html
             
@@ -1200,8 +1303,8 @@ class DeepWikiExporter:
                 # deepwiki.com: リンクをクリックしてナビゲーション
                 self._navigate_deepwiki(section)
             else:
-                # app.devin.ai/wiki: ボタンをクリック
-                self._navigate_devin(elem_index)
+                # app.devin.ai/wiki: リンクをクリックまたはURL直接遷移
+                self._navigate_devin(section)
             
             # ページ読み込み待機
             self.wait_for_page_load()
@@ -1248,7 +1351,7 @@ class DeepWikiExporter:
         
         # サイドバーのリンクをクリック（SPAルーティングを活用して高速化）
         sidebar_selectors = [
-            'ul[devin-scrollable="true"] li a',
+            'ul li a[data-selected]',
             'ul li a[href*="/"]',
             '[class*="sidebar"] li a',
             'aside li a',
@@ -1289,35 +1392,58 @@ class DeepWikiExporter:
         else:
             raise Exception(_("Link index {} is out of range and href is not available").format(elem_index))
     
-    def _navigate_devin(self, btn_index):
-        """app.devin.ai/wiki用のナビゲーション（ボタンクリック）"""
+    def _navigate_devin(self, section):
+        """app.devin.ai/wiki用のナビゲーション（リンククリックまたはURL直接遷移）"""
+        elem_index = section['index']
+        href = section.get('href', '')
+        
+        # サイドバーのリンクを取得してクリックを試行
         sidebar_selectors = [
-            'ul.flex-1 li button',
-            'ul.overflow-y-auto li button',
-            '[class*="sidebar"] li button',
-            'aside li button',
-            'nav li button'
+            'a[href*="/page/"]',
+            'ul li a[aria-label]',
         ]
         
-        buttons = []
+        links = []
         for selector in sidebar_selectors:
             try:
-                buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                if buttons:
+                found = self.driver.find_elements(
+                    By.CSS_SELECTOR, selector
+                )
+                valid = [
+                    lnk for lnk in found
+                    if lnk.get_attribute('href')
+                    and '/page/' in lnk.get_attribute('href')
+                ]
+                if valid:
+                    links = valid
                     break
-            except:
+            except Exception:
                 continue
         
-        if btn_index >= len(buttons):
-            raise Exception(_("Button index {} is out of range").format(btn_index))
+        # リンククリックを試行（SPAルーティング）
+        if elem_index < len(links):
+            link = links[elem_index]
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    EC.element_to_be_clickable(link)
+                )
+                link.click()
+                return
+            except Exception as e:
+                print(_("  Link click failed, falling back to URL: {}").format(
+                    e
+                ))
         
-        btn = buttons[btn_index]
-        try:
-            WebDriverWait(self.driver, 3).until(EC.element_to_be_clickable(btn))
-            btn.click()
-        except Exception as click_err:
-            print(_("  Click wait error, trying direct click: {}").format(click_err))
-            btn.click()
+        # フォールバック: 直接URLに遷移
+        if href:
+            if not href.startswith('http'):
+                href = "https://app.devin.ai" + href
+            self.driver.get(href)
+        else:
+            raise Exception(
+                _("Link index {} is out of range and href is not available"
+                  ).format(elem_index)
+            )
     
     def generate_chapter_numbers(self, sections):
         """セクションリストから階層的な章番号を生成"""
@@ -1420,10 +1546,10 @@ class DeepWikiExporter:
                 dotted = '.'.join(str(int(p)) for p in parts)
                 link_map[dotted] = item['filename']
         
-        # deepwiki.com用: URL パス→ファイル名のマッピングを作成
+        # URL パス→ファイル名のマッピングを作成（両サイト対応）
         path_map = {}
         base_path = ''
-        if self.site_type == self.SITE_DEEPWIKI and hasattr(self, 'base_url'):
+        if hasattr(self, 'base_url'):
             from urllib.parse import urlparse
             parsed = urlparse(self.base_url)
             path_parts = parsed.path.strip('/').split('/')
@@ -1467,8 +1593,8 @@ class DeepWikiExporter:
             pattern_num = r'\[([^\]]+)\]\(#(\d+(?:\.\d+)*)\)'
             content = re.sub(pattern_num, replace_num_link, content)
             
-            # 2. deepwiki.com用: パスリンク変換
-            if self.site_type == self.SITE_DEEPWIKI and path_map:
+            # 2. パスリンク変換（両サイト対応）
+            if path_map:
                 def replace_path_link(match):
                     text = match.group(1)
                     href = match.group(2)
@@ -1486,8 +1612,12 @@ class DeepWikiExporter:
                         return f'[{text}](./{path_map[path]})'
                     return match.group(0)
                 
-                # deepwiki.comのリンクパターン
-                pattern_path = r'\[([^\]]+)\]\((https?://deepwiki\.com/[^\)]+|/[^\)]+)\)'
+                # deepwiki.comおよびapp.devin.aiのリンクパターン
+                pattern_path = (
+                    r'\[([^\]]+)\]\('
+                    r'(https?://(?:deepwiki\.com|app\.devin\.ai)/[^\)]+|'
+                    r'/[^\)]+)\)'
+                )
                 content = re.sub(pattern_path, replace_path_link, content)
             
             if content != original:
@@ -1822,7 +1952,7 @@ def main():
         description=_('DeepWiki Export Tool'),
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('url', help=_('DeepWiki URL (e.g., https://deepwiki.com/owner/repo or https://app.devin.ai/wiki/owner/repo)'))
+    parser.add_argument('url', help=_('DeepWiki URL (e.g., https://deepwiki.com/owner/repo or https://app.devin.ai/org/{org}/wiki/owner/repo)'))
     parser.add_argument('-o', '--output', default='output', help=_('Output directory (default: output)'))
     parser.add_argument('-l', '--lang', default='japanese', help=_('Language selection (default: japanese) *disabled for deepwiki.com'))
     parser.add_argument('-d', '--diagram_type', default='mermaid,svg', 
