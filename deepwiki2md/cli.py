@@ -91,11 +91,8 @@ except ImportError:
 # cairosvgはforeignObject（HTML埋め込み）を正しくレンダリングできないため不使用
 
 # 既存のMermaid変換モジュールをインポート
-script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, script_dir)
-
 try:
-    from extract_subgraphs import extract_mermaid_from_svg
+    from deepwiki2md.extract_subgraphs import extract_mermaid_from_svg
     HAS_MERMAID_CONVERTER = True
 except ImportError:
     HAS_MERMAID_CONVERTER = False

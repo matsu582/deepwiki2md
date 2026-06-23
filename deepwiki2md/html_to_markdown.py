@@ -41,8 +41,7 @@ def set_language(language):
         _ = lambda x: x
 
 # 既存のMermaid変換ロジックをインポート
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from extract_subgraphs import extract_mermaid_from_svg
+from deepwiki2md.extract_subgraphs import extract_mermaid_from_svg
 
 # SVG出力用のグローバル変数
 _svg_counter = 0
