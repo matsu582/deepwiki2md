@@ -5,7 +5,40 @@ import re
 import os
 import sys
 import html
+import gettext
 from bs4 import BeautifulSoup
+
+# 多言語化設定（deepwiki2md.pyと同じロジック）
+def _setup_i18n():
+    """gettextによる多言語化を設定"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    locale_dir = os.path.join(script_dir, 'locale')
+    lang = os.environ.get('LANG', '')
+    language = 'ja' if lang.startswith('ja') else 'en'
+    try:
+        translation = gettext.translation(
+            'deepwiki2md', localedir=locale_dir,
+            languages=[language], fallback=True
+        )
+        return translation.gettext
+    except Exception:
+        return lambda x: x
+
+_ = _setup_i18n()
+
+def set_language(language):
+    """外部から言語を切り替える"""
+    global _
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    locale_dir = os.path.join(script_dir, 'locale')
+    try:
+        translation = gettext.translation(
+            'deepwiki2md', localedir=locale_dir,
+            languages=[language], fallback=True
+        )
+        _ = translation.gettext
+    except Exception:
+        _ = lambda x: x
 
 # 既存のMermaid変換ロジックをインポート
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -414,9 +447,9 @@ def convert_svg_to_mermaid(svg_elem):
             with open(svg_path, 'w', encoding='utf-8') as f:
                 f.write(svg_str_export)
             # Markdownに画像リンクを追加（detailsタグで囲む）
-            result_parts.append(f"<details>\n<summary>SVG図を表示</summary>\n\n![図]({_svg_relative_path}/{svg_filename})\n\n</details>\n\n")
+            result_parts.append(f"<details>\n<summary>{_('Show {format}').format(format=_('SVG Diagram'))}</summary>\n\n![{_('Diagram')}]({_svg_relative_path}/{svg_filename})\n\n</details>\n\n")
         except Exception as e:
-            print(f"SVG保存エラー: {e}", file=sys.stderr)
+            print(f"{_('SVG save error')}: {e}", file=sys.stderr)
     
     # Mermaid変換を試みる
     try:
@@ -424,7 +457,7 @@ def convert_svg_to_mermaid(svg_elem):
         if mermaid_code and len(mermaid_code) > 20:
             result_parts.append(f"```mermaid\n{mermaid_code}\n```\n\n")
     except Exception as e:
-        print(f"Mermaid変換エラー: {e}", file=sys.stderr)
+        print(f"{_('Mermaid conversion error')}: {e}", file=sys.stderr)
     
     return ''.join(result_parts)
 
@@ -483,7 +516,7 @@ def html_to_markdown(html_content):
 
 def main():
     if len(sys.argv) < 2:
-        print("使用法: python html_to_markdown.py <HTMLファイル> [出力ファイル] [SVG出力ディレクトリ] [SVGベース名]")
+        print(_("Usage: python html_to_markdown.py <HTML file> [output file] [SVG output dir] [SVG base name]"))
         sys.exit(1)
     
     input_file = sys.argv[1]
@@ -513,7 +546,7 @@ def main():
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(md_content)
-        print(f"変換完了: {output_file}")
+        print(f"{_('Conversion complete')}: {output_file}")
     else:
         print(md_content)
 

@@ -5,6 +5,39 @@ import re
 import os
 import sys
 import html
+import gettext
+
+# 多言語化設定
+def _setup_i18n():
+    """gettextによる多言語化を設定"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    locale_dir = os.path.join(script_dir, 'locale')
+    lang = os.environ.get('LANG', '')
+    language = 'ja' if lang.startswith('ja') else 'en'
+    try:
+        translation = gettext.translation(
+            'deepwiki2md', localedir=locale_dir,
+            languages=[language], fallback=True
+        )
+        return translation.gettext
+    except Exception:
+        return lambda x: x
+
+_ = _setup_i18n()
+
+def set_language(language):
+    """外部から言語を切り替える"""
+    global _
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    locale_dir = os.path.join(script_dir, 'locale')
+    try:
+        translation = gettext.translation(
+            'deepwiki2md', localedir=locale_dir,
+            languages=[language], fallback=True
+        )
+        _ = translation.gettext
+    except Exception:
+        _ = lambda x: x
 
 def sanitize_sequence_text(text):
     """シーケンス図のメッセージテキストをサニタイズ"""
@@ -1392,11 +1425,11 @@ def main():
             stats['failed'] += 1
             print(f"[ERR] {svg_file}: {e}")
     
-    print(f"\n=== 統計 ===")
-    print(f"合計: {stats['total']}")
-    print(f"成功: {stats['success']}")
-    print(f"サブグラフあり: {stats['with_subgraph']}")
-    print(f"失敗: {stats['failed']}")
+    print(f"\n=== {_('Statistics')} ===")
+    print(f"{_('Total')}: {stats['total']}")
+    print(f"{_('Success')}: {stats['success']}")
+    print(f"{_('With subgraph')}: {stats['with_subgraph']}")
+    print(f"{_('Failed')}: {stats['failed']}")
 
 if __name__ == '__main__':
     main()

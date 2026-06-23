@@ -1235,7 +1235,7 @@ class DeepWikiExporter:
             try:
                 with open(svg_path, 'w', encoding='utf-8') as f:
                     f.write(svg_str_export)
-                outputs['svg'] = f"![図](images/{svg_filename})"
+                outputs['svg'] = f"![{_('Diagram')}](images/{svg_filename})"
             except Exception as e:
                 print(_("  SVG save error: {}").format(e))
         
@@ -1253,7 +1253,7 @@ class DeepWikiExporter:
                     print(_("  SVG save error (for PNG): {}").format(e))
             # PNG変換をキューに追加（後で一括処理）
             self.pending_png_conversions.append((svg_for_png_path, png_path))
-            outputs['png'] = f"![図](images/{png_filename})"
+            outputs['png'] = f"![{_('Diagram')}](images/{png_filename})"
         
         # Mermaid出力
         if 'mermaid' in self.diagram_types:
@@ -1284,9 +1284,9 @@ class DeepWikiExporter:
                 is_first = False
             else:
                 # 2番目以降はdetailsで折りたたみ
-                label = {'svg': 'SVG図', 'png': 'PNG図', 'mermaid': 'Mermaid記法'}
+                label = {'svg': _('SVG Diagram'), 'png': _('PNG Image'), 'mermaid': _('Mermaid Notation')}
                 summary = label.get(dtype, dtype)
-                result_parts.append(f"<details>\n<summary>{summary}を表示</summary>\n\n{content}\n\n</details>\n\n")
+                result_parts.append(f"<details>\n<summary>{_('Show {format}').format(format=summary)}</summary>\n\n{content}\n\n</details>\n\n")
         
         return ''.join(result_parts)
     
