@@ -352,18 +352,35 @@ def assign_nodes_to_clusters(node_positions, clusters):
     return node_cluster_map
 
 def extract_edges(svg_content, nodes):
-    """SVGからエッジ情報を抽出（インデックスベースのラベルマッピング対応）"""
+    """SVGからエッジ情報を抽出（クラスベース＋IDベースの二段階抽出）"""
     edges = []
     edge_indices = []
-    edge_pattern = r'id="L[-_]([^-_]+)[-_]([^-_]+)[-_](\d+)"'
     
-    for match in re.finditer(edge_pattern, svg_content):
-        from_node = match.group(1)
-        to_node = match.group(2)
-        idx = int(match.group(3))
-        if from_node in nodes and to_node in nodes:
-            edges.append((from_node, to_node))
-            edge_indices.append(idx)
+    # 方式1: edgePathグループのLS-/LE-クラス属性から抽出（アンダースコア含むノードID対応）
+    edge_group_pattern = r'<g[^>]*class="[^"]*edgePath[^"]*"[^>]*>'
+    for match in re.finditer(edge_group_pattern, svg_content):
+        tag = match.group(0)
+        ls_match = re.search(r'LS-([^\s"]+)', tag)
+        le_match = re.search(r'LE-([^\s"]+)', tag)
+        idx_match = re.search(r'id="[^"]*?-(\d+)"', tag)
+        if ls_match and le_match:
+            from_node = ls_match.group(1)
+            to_node = le_match.group(1)
+            idx = int(idx_match.group(1)) if idx_match else len(edges)
+            if from_node in nodes and to_node in nodes:
+                edges.append((from_node, to_node))
+                edge_indices.append(idx)
+    
+    # 方式2: 方式1で抽出できなかった場合、ID属性から抽出（フォールバック）
+    if not edges:
+        edge_pattern = r'id="L-([^-"]+)-([^-"]+)-(\d+)"'
+        for match in re.finditer(edge_pattern, svg_content):
+            from_node = match.group(1)
+            to_node = match.group(2)
+            idx = int(match.group(3))
+            if from_node in nodes and to_node in nodes:
+                edges.append((from_node, to_node))
+                edge_indices.append(idx)
     
     # 全edgeLabelグループを抽出（空も含む）
     # これによりインデックスの対応を維持
