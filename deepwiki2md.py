@@ -752,6 +752,7 @@ class DeepWikiExporter:
             return sections
         
         # 各リンクの情報を収集（hrefの/page/X.Y形式から階層レベルを判定）
+        seen_hrefs = set()
         for idx, link in enumerate(links):
             try:
                 # aria-labelまたはテキストからタイトルを取得
@@ -766,6 +767,12 @@ class DeepWikiExporter:
                     continue
                 
                 href = link.get_attribute('href') or ''
+                
+                # 同一hrefのリンクが複数存在する場合、最初のもののみ採用
+                href_path = re.sub(r'^https?://[^/]+', '', href)
+                if href_path in seen_hrefs:
+                    continue
+                seen_hrefs.add(href_path)
                 
                 # /page/X.Y のパターンからレベルを判定
                 level = 0
