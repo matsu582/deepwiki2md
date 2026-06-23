@@ -1284,9 +1284,9 @@ class DeepWikiExporter:
                 is_first = False
             else:
                 # 2番目以降はdetailsで折りたたみ
-                label = {'svg': 'SVG図', 'png': 'PNG図', 'mermaid': 'Mermaid記法'}
+                label = {'svg': _('SVG Diagram'), 'png': _('PNG Image'), 'mermaid': _('Mermaid Notation')}
                 summary = label.get(dtype, dtype)
-                result_parts.append(f"<details>\n<summary>{summary}を表示</summary>\n\n{content}\n\n</details>\n\n")
+                result_parts.append(f"<details>\n<summary>{_('Show {format}').format(format=summary)}</summary>\n\n{content}\n\n</details>\n\n")
         
         return ''.join(result_parts)
     
