@@ -47,9 +47,28 @@ This mode runs with the browser window displayed. It is useful for initial setup
 - Chrome/Chromium browser
 - uv (recommended) or pip
 
-## Installation (Using uv - Recommended)
+## Installation (From PyPI - Recommended)
 
-### 1. Install uv
+```bash
+# Install with pip
+pip install deepwiki2md
+
+# Or install with uv
+uv tool install deepwiki2md
+```
+
+After installation, the `deepwiki2md` command is available:
+
+```bash
+deepwiki2md <DeepWiki URL>
+
+# Or run as a Python module
+python -m deepwiki2md <DeepWiki URL>
+```
+
+## Installation (From Source)
+
+### Using uv (Recommended)
 
 If uv is not installed, use the following command to install it.
 
@@ -63,34 +82,23 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Create Virtual Environment and Install Dependencies
-
 ```bash
 # Navigate to project directory
 cd deepwiki2md
 
 # Create virtual environment and install dependencies
 uv sync
+
+# Run
+uv run deepwiki2md <DeepWiki URL>
 ```
 
-### 3. Run
+### Using pip
 
 ```bash
-# Run with uv
-uv run python deepwiki2md.py <DeepWiki URL>
+# Navigate to project directory
+cd deepwiki2md
 
-# Or activate virtual environment and run
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-python deepwiki2md.py <DeepWiki URL>
-```
-
-## Installation (Using pip)
-
-```bash
 # Create virtual environment (recommended)
 python -m venv .venv
 
@@ -100,8 +108,11 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install in editable mode
+pip install -e .
+
+# Run
+deepwiki2md <DeepWiki URL>
 ```
 
 ## Usage
@@ -109,11 +120,14 @@ pip install -r requirements.txt
 ### Basic Usage
 
 ```bash
-# Using uv
-uv run python deepwiki2md.py <DeepWiki URL>
+# Installed from PyPI
+deepwiki2md <DeepWiki URL>
 
-# Using pip (after activating virtual environment)
-python deepwiki2md.py <DeepWiki URL>
+# Using uv (from source)
+uv run deepwiki2md <DeepWiki URL>
+
+# As a Python module
+python -m deepwiki2md <DeepWiki URL>
 ```
 
 ### Options
@@ -138,28 +152,28 @@ python deepwiki2md.py <DeepWiki URL>
 
 ```bash
 # app.devin.ai/wiki (login required)
-uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo
+deepwiki2md https://app.devin.ai/wiki/owner/repo
 
 # deepwiki.com (no login required)
-uv run python deepwiki2md.py https://deepwiki.com/owner/repo
+deepwiki2md https://deepwiki.com/owner/repo
 
 # Specify output directory
-uv run python deepwiki2md.py https://deepwiki.com/owner/repo -o ./my_docs
+deepwiki2md https://deepwiki.com/owner/repo -o ./my_docs
 
 # Retrieve in English (app.devin.ai/wiki only)
-uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -l english
+deepwiki2md https://app.devin.ai/wiki/owner/repo -l english
 
 # PNG images only
-uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png
+deepwiki2md https://deepwiki.com/owner/repo -d png
 
 # PNG first, Mermaid and SVG in collapsible sections
-uv run python deepwiki2md.py https://deepwiki.com/owner/repo -d png,mermaid,svg
+deepwiki2md https://deepwiki.com/owner/repo -d png,mermaid,svg
 
 # Specify email address
-uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo -e user@example.com
+deepwiki2md https://app.devin.ai/wiki/owner/repo -e user@example.com
 
 # Run in GUI mode (display browser window)
-uv run python deepwiki2md.py https://app.devin.ai/wiki/owner/repo --no-headless
+deepwiki2md https://app.devin.ai/wiki/owner/repo --no-headless
 ```
 
 ## Execution Flow
@@ -206,13 +220,21 @@ output_directory/
 
 ## File Structure
 
-| File                   | Description                 |
-| ---------------------- | --------------------------- |
-| `deepwiki2md.py`       | Main script                 |
-| `extract_subgraphs.py` | SVG to Mermaid conversion   |
-| `html_to_markdown.py`  | HTML to Markdown conversion |
-| `pyproject.toml`       | Project configuration (uv)  |
-| `requirements.txt`     | Dependencies (pip)          |
+```
+deepwiki2md/
+├── deepwiki2md/
+│   ├── __init__.py           # Package initialization / version info
+│   ├── __main__.py           # python -m deepwiki2md support
+│   ├── cli.py                # Main script (entry point)
+│   ├── extract_subgraphs.py  # SVG to Mermaid conversion
+│   ├── html_to_markdown.py   # HTML to Markdown conversion
+│   └── locale/               # i18n translation files
+│       └── ja/LC_MESSAGES/
+├── pyproject.toml            # Project configuration
+├── README.md
+├── README_JP.md
+└── LICENSE
+```
 
 ## Troubleshooting
 
