@@ -282,6 +282,36 @@ msgstr "Mermaid記法"
 msgid "Show {format}"
 msgstr "{format}を表示"
 
+msgid "Diagram"
+msgstr "図"
+
+msgid "SVG save error"
+msgstr "SVG保存エラー"
+
+msgid "Mermaid conversion error"
+msgstr "Mermaid変換エラー"
+
+msgid "Conversion complete"
+msgstr "変換完了"
+
+msgid "Usage: python html_to_markdown.py <HTML file> [output file] [SVG output dir] [SVG base name]"
+msgstr "使用法: python html_to_markdown.py <HTMLファイル> [出力ファイル] [SVG出力ディレクトリ] [SVGベース名]"
+
+msgid "Statistics"
+msgstr "統計"
+
+msgid "Total"
+msgstr "合計"
+
+msgid "Success"
+msgstr "成功"
+
+msgid "With subgraph"
+msgstr "サブグラフあり"
+
+msgid "Failed"
+msgstr "失敗"
+
 msgid "Error: Please specify a valid URL"
 msgstr "エラー: 有効なURLを指定してください"
 

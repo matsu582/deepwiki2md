@@ -1235,7 +1235,7 @@ class DeepWikiExporter:
             try:
                 with open(svg_path, 'w', encoding='utf-8') as f:
                     f.write(svg_str_export)
-                outputs['svg'] = f"![図](images/{svg_filename})"
+                outputs['svg'] = f"![{_('Diagram')}](images/{svg_filename})"
             except Exception as e:
                 print(_("  SVG save error: {}").format(e))
         
@@ -1253,7 +1253,7 @@ class DeepWikiExporter:
                     print(_("  SVG save error (for PNG): {}").format(e))
             # PNG変換をキューに追加（後で一括処理）
             self.pending_png_conversions.append((svg_for_png_path, png_path))
-            outputs['png'] = f"![図](images/{png_filename})"
+            outputs['png'] = f"![{_('Diagram')}](images/{png_filename})"
         
         # Mermaid出力
         if 'mermaid' in self.diagram_types:
