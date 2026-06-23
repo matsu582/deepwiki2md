@@ -235,16 +235,16 @@ Session information is saved in the following location:
 
 If problems occur, delete this directory.
 
-## 対応DeepWikiバージョン
+## Supported DeepWiki Version
 
-本ツールは以下の時点のDeepWikiサイト構造に対応しています。
+This tool is compatible with the DeepWiki site structure as of the following dates.
 
-| サイト | 確認日 | 主な対応構造 |
+| Site | Verified | Key Structures |
 | --- | --- | --- |
-| deepwiki.com | 2025-06-23 | コンテンツ: `div[class*="prose-custom"]`、サイドバー: リンクベース |
-| app.devin.ai/wiki | 2025-06-23 | コンテンツ: `div.prose-main`、サイドバー: `a[href*="/page/"]`（/page/X.Y形式）、言語選択: 右上「...」メニュー内 `menuitemradio`、URL: `/org/{org}/wiki/{owner}/{repo}/page/{num}` |
+| deepwiki.com | 2025-06-23 | Content: `div[class*="prose-custom"]`, Sidebar: link-based |
+| app.devin.ai/wiki | 2025-06-23 | Content: `div.prose-main`, Sidebar: `a[href*="/page/"]` (/page/X.Y format), Language: `menuitemradio` inside "..." menu, URL: `/org/{org}/wiki/{owner}/{repo}/page/{num}` |
 
-DeepWikiのサイト構造は予告なく変更される場合があります。動作しない場合はサイト構造の変更が原因の可能性があります。
+DeepWiki's site structure may change without notice. If the tool stops working, a structural change is likely the cause.
 
 ## Notes
 
