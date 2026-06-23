@@ -68,6 +68,11 @@ python -m deepwiki2md <DeepWiki URL>
 
 ## Installation (From Source)
 
+```bash
+git clone https://github.com/matsu582/deepwiki2md.git
+cd deepwiki2md
+```
+
 ### Using uv (Recommended)
 
 If uv is not installed, use the following command to install it.
@@ -83,22 +88,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ```bash
-# Navigate to project directory
-cd deepwiki2md
-
-# Create virtual environment and install dependencies
-uv sync
-
-# Run
+# Dependencies are resolved and installed automatically
 uv run deepwiki2md <DeepWiki URL>
 ```
 
 ### Using pip
 
 ```bash
-# Navigate to project directory
-cd deepwiki2md
-
 # Create virtual environment (recommended)
 python -m venv .venv
 
@@ -108,11 +104,23 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-# Install in editable mode
+# Install from source
 pip install -e .
 
 # Run
 deepwiki2md <DeepWiki URL>
+```
+
+### Without Installation (dependencies only)
+
+You can run the tool directly without installing the package itself:
+
+```bash
+# Install dependencies only
+pip install selenium beautifulsoup4 webdriver-manager
+
+# Run as a Python module from the repository root
+python -m deepwiki2md <DeepWiki URL>
 ```
 
 ## Usage
@@ -123,10 +131,10 @@ deepwiki2md <DeepWiki URL>
 # Installed from PyPI
 deepwiki2md <DeepWiki URL>
 
-# Using uv (from source)
+# Using uv from cloned source (no install needed)
 uv run deepwiki2md <DeepWiki URL>
 
-# As a Python module
+# As a Python module (from cloned source root)
 python -m deepwiki2md <DeepWiki URL>
 ```
 

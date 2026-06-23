@@ -68,6 +68,11 @@ python -m deepwiki2md <DeepWiki URL>
 
 ## インストール（ソースから）
 
+```bash
+git clone https://github.com/matsu582/deepwiki2md.git
+cd deepwiki2md
+```
+
 ### uv使用（推奨）
 
 uvがインストールされていない場合は、以下のコマンドでインストールしてください。
@@ -83,22 +88,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ```bash
-# プロジェクトディレクトリに移動
-cd deepwiki2md
-
-# 仮想環境を作成して依存パッケージをインストール
-uv sync
-
-# 実行
+# 依存パッケージは自動的に解決・インストールされます
 uv run deepwiki2md <DeepWiki URL>
 ```
 
 ### pip使用
 
 ```bash
-# プロジェクトディレクトリに移動
-cd deepwiki2md
-
 # 仮想環境を作成（推奨）
 python -m venv .venv
 
@@ -108,11 +104,23 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-# 編集可能モードでインストール
+# ソースからインストール
 pip install -e .
 
 # 実行
 deepwiki2md <DeepWiki URL>
+```
+
+### インストールなしで実行（依存パッケージのみ）
+
+パッケージ自体をインストールせず、直接実行することもできます：
+
+```bash
+# 依存パッケージのみインストール
+pip install selenium beautifulsoup4 webdriver-manager
+
+# リポジトリルートからPythonモジュールとして実行
+python -m deepwiki2md <DeepWiki URL>
 ```
 
 ## 使用方法
@@ -123,10 +131,10 @@ deepwiki2md <DeepWiki URL>
 # PyPIからインストール済み
 deepwiki2md <DeepWiki URL>
 
-# uv使用（ソースから）
+# uv使用（クローンしたソースから、インストール不要）
 uv run deepwiki2md <DeepWiki URL>
 
-# Pythonモジュールとして
+# Pythonモジュールとして（クローンしたソースのルートから）
 python -m deepwiki2md <DeepWiki URL>
 ```
 
