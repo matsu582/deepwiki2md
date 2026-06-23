@@ -241,8 +241,8 @@ webdriver-managerが自動的にChromeDriverをダウンロードしますが、
 
 | サイト | 確認日 | 主な対応構造 |
 | --- | --- | --- |
-| deepwiki.com | 2025-06-23 | コンテンツ: `div[class*="prose-custom"]`、サイドバー: リンクベース |
-| app.devin.ai/wiki | 2025-06-23 | コンテンツ: `div.prose-main`、サイドバー: `a[href*="/page/"]`（/page/X.Y形式）、言語選択: 右上「...」メニュー内 `menuitemradio`、URL: `/org/{org}/wiki/{owner}/{repo}/page/{num}` |
+| deepwiki.com | 2026-06-23 | コンテンツ: `div[class*="prose-custom"]`、サイドバー: リンクベース |
+| app.devin.ai/wiki | 2026-06-23 | コンテンツ: `div.prose-main`、サイドバー: `a[href*="/page/"]`（/page/X.Y形式）、言語選択: 右上「...」メニュー内 `menuitemradio`、URL: `/org/{org}/wiki/{owner}/{repo}/page/{num}` |
 
 DeepWikiのサイト構造は予告なく変更される場合があります。動作しない場合はサイト構造の変更が原因の可能性があります。
 
